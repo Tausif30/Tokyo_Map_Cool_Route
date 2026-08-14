@@ -1,0 +1,8 @@
+Directory_Tree_Command.txt
+# Large GIS source data
+Street_Trees/
+Woodland_Area/
+Public_Green_Spaces/
+
+# Large generated outputs
+outputs/*.geojson
