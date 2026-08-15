@@ -1,5 +1,5 @@
 """
-Turn raw CSVs + GIS shapefiles into 5 clean-ish, English, WGS84
+Turn raw CSVs + GIS shapefiles into clean-ish, English, WGS84
 GeoJSON layers. This absorbs work that used to be split across two files:
   - Analysis.py used to build the street-tree and drinking-water GeoJSONs
     from the yearbook CSVs.
@@ -8,18 +8,49 @@ Both of those code paths now live here instead, so Analysis.py only does
 statistical-yearbook cleaning, and Green_Data.py is retired (nothing left
 in it that isn't also here).
 
-OUTPUT — 5 files, one per category, written to outputs/:
-  1. Water_Canals_merged.geojson       (rivers, canals, waterworks, lakes,
-                                         tidal flats, springs)
-  2. Street_Trees_merged.geojson       (every point/line street-tree record
-                                         we have — see note below)
-  3. Parks_Green_Spaces_merged.geojson
-  4. Protected_Green_Spaces_merged.geojson
-  5. Drinking_Stations_merged.geojson
+OUTPUT — 8 files, one per category, written to outputs/. No "_merged" /
+"_clean" / "_final" suffixes anymore — the whole Pipeline B chain now
+edits these same 8 files in place (see the 3 scripts' docstrings):
+  1. Water_Canals.geojson
+  2. Street_Trees.geojson            (points only — see note)
+  3. Street_Trees_Tama.geojson       (lines only — see note)
+  4. Parks_Green_Spaces.geojson      (points + POLYGONS)
+  5. Protected_Green_Spaces.geojson  (points + POLYGONS)
+  6. Drinking_Station.geojson
+  7. Public_Facility_Greenery.geojson  (POLYGONS)
+  8. Public_Housing_Greenery.geojson   (POLYGONS)
+
+NOTE — Street Trees is split by GEOMETRY, not by source. Street_Trees.
+geojson has every POINT record: the yearbook-CSV individual trees
+(Street_Trees_23_Wards.csv + Street_Trees_Tama_Ward.csv) plus the GIS
+23-ward TMG-road tree points. Street_Trees_Tama.geojson has the GIS LINE
+data only — route-level tree records covering TMG roads in Tama PLUS any
+ward/municipality-managed road ANYWHERE, including inside the 23 wards.
+That second point matters: this file is named after its source shapefile
+(街路樹（多摩部都道、区市町村道）_line.shp), not because every line in it
+is geographically in Tama — a ward-managed street in other wards with 
+trees along it legitimately shows up here too. They used to be mixed
+into one file, which made the line data look like unrelated stray lines
+wherever a ward-managed road happened to have trees. Both files still tag
+"category": "Street Trees" vs "Street Trees (Tama)" the same way.
+
+NOTE — POLYGONS are kept for Parks_Green_Spaces, Protected_Green_Areas,
+Public_Green_Spaces, and Public_Rental_House_Greenery (see
+CATEGORIES_WITH_POLYGONS below) — that's where actual area boundaries
+live (park/conservation-area boundaries, and small landscaped areas around
+public buildings/housing). Water_Canals and both Street_Trees files still
+drop Polygon/MultiPolygon features. Add a category to
+CATEGORIES_WITH_POLYGONS if you want polygons somewhere else too.
+
+NOTE — 6 Green Open Data category folders are scanned
+(Water_Canals, Street_Trees, Parks_Green_Spaces, Protected_Green_Areas,
+Public_Green_Spaces, Public_Rental_House_Greenery). Farmland,
+Woodland_Area, and Urban_Plan_Green_Spaces are still left out — add a
+folder to CATEGORY_MAP below if you want one of those back too.
 
 RUN ORDER: this script has no dependencies on the others and should run
 FIRST. Analysis.py (tree-density-by-ward) and EDA.py (chart 7, top tree
-species) both read this script's output, so run Map_Data.py before either
+species) both read Street_Trees.geojson, so run Map_Data.py before either
 of them.
 """
 
@@ -32,30 +63,44 @@ CSV_DIR = BASE_DIR / "csv"
 OUT_DIR = BASE_DIR / "outputs"
 OUT_DIR.mkdir(exist_ok=True)
 
-
 # Shapefile category folders to scan: folder name -> English category.
-# Only these 4 folders are walked — see module docstring.
+# Only these folders are walked — see module docstring.
 CATEGORY_MAP = {
     "Water_Canals": "Water & Canals",
     "Street_Trees": "Street Trees",
     "Parks_Green_Spaces": "Parks & Green Spaces",
     "Protected_Green_Areas": "Protected Green Spaces",
+    "Public_Green_Spaces": "Public Facility Greenery",
+    "Public_Rental_House_Greenery": "Public Housing Greenery",
+}
+
+# Categories allowed to keep Polygon/MultiPolygon features. Everywhere else,
+# polygons are still read (so they can be logged) then dropped — see
+# load_shapefiles(). Parks and Protected Areas are where the actual park/
+# conservation-area boundaries live. Public Facility/Housing Greenery are
+# each a single shapefile representing a landscaped area around a building
+# — almost certainly polygon-only in the real data, same reasoning as
+# parks, so they're included here too rather than risking an empty file.
+CATEGORIES_WITH_POLYGONS = {
+    "Parks & Green Spaces", "Protected Green Spaces",
+    "Public Facility Greenery", "Public Housing Greenery",
 }
 
 # category -> output filename. Kept separate from CATEGORY_MAP so category
-# names and file names can change independently. To split Street Trees back
-# into two files (csv vs gis), give the gis_shapefile rows their own
-# category below instead of reusing "Street Trees".
+# names and file names can change independently.
 OUTPUT_FILES = {
-    "Water & Canals": "Water_Canals_merged.geojson",
-    "Street Trees": "Street_Trees_merged.geojson",
-    "Parks & Green Spaces": "Parks_Green_Spaces_merged.geojson",
-    "Protected Green Spaces": "Protected_Green_Spaces_merged.geojson",
-    "Drinking Stations": "Drinking_Stations_merged.geojson",
+    "Water & Canals": "Water_Canals.geojson",
+    "Street Trees": "Street_Trees.geojson",
+    "Street Trees (Tama)": "Street_Trees_Tama.geojson",
+    "Parks & Green Spaces": "Parks_Green_Spaces.geojson",
+    "Protected Green Spaces": "Protected_Green_Spaces.geojson",
+    "Drinking Station": "Drinking_Station.geojson",
+    "Public Facility Greenery": "Public_Facility_Greenery.geojson",
+    "Public Housing Greenery": "Public_Housing_Greenery.geojson",
 }
 
 # Japanese subfolder/filename fragment -> English label. Pruned to just the
-# 4 scanned categories (the full original list had ~38 entries covering all
+# 6 scanned categories (the full original list had ~38 entries covering all
 # 9 categories — add entries back here if you re-enable a folder above).
 LABEL_MAP = {
     "河川": "River/Canal", "上水": "Waterworks/Irrigation",
@@ -69,13 +114,15 @@ LABEL_MAP = {
     "東京都保全地域": "TMG Conservation Area", "保存樹林": "Preserved Forest",
     "保存樹木": "Preserved Tree/Hedge", "農の風景育成地区": "Agricultural Landscape District",
     "都民の森": "Citizens' Forest",
+    "公共施設の緑": "Public Facility Greenery",
+    "公的賃貸住宅の緑": "Public Housing Greenery",
 }
 
 # Japanese DBF field name -> English column name. Left as the FULL original
 # set (unpruned) — these are generic enough to show up in any category's
-# attribute table, and we have no visibility into which DBF fields the 4
-# remaining folders actually use, so pruning risks silently breaking a
-# translation that used to work.
+# attribute table, and we have no visibility into which DBF fields these
+# folders actually use, so pruning risks silently breaking a translation
+# that used to work.
 FIELD_TRANSLATIONS = {
     "地点コード": "point_code", "名称": "name", "区市町村": "municipality",
     "所在地": "address", "流入河川": "inflow_river", "面積m2": "area_m2",
@@ -110,13 +157,13 @@ def translate_columns(gdf):
         elif any(ord(ch) > 127 for ch in col):
             unmatched.append(col)
     if unmatched:
-        print(f"(untranslated columns, add to FIELD_TRANSLATIONS: {unmatched})")
+        print(f"    (untranslated columns, add to FIELD_TRANSLATIONS: {unmatched})")
     return gdf.rename(columns=rename_map)
 
 
-
-# GIS shapefiles — walk the 4 category folders. Points + lines only; any
-# Polygon/MultiPolygon layer is read (so it can be logged) then dropped.
+# GIS shapefiles — walk the category folders. Points + lines everywhere;
+# Polygon/MultiPolygon is also kept for categories in
+# CATEGORIES_WITH_POLYGONS (Parks & Protected Areas), dropped elsewhere.
 def load_shapefiles(base_dir):
     kept, skipped_polygons = [], []
     for shp_path in sorted(base_dir.rglob("*.shp")):
@@ -143,11 +190,17 @@ def load_shapefiles(base_dir):
             continue
 
         geom_type = gdf.geom_type.iloc[0]
-        if geom_type in ("Polygon", "MultiPolygon"):
+
+        # Street_Trees' line-geometry shapefile is route-level data covering
+        # TMG roads in Tama PLUS any ward/municipality-managed road anywhere
+        #Route it to its own category/file instead.
+        if top_folder == "Street_Trees" and geom_type in ("LineString", "MultiLineString"):
+            category = "Street Trees (Tama)"
+
+        if geom_type in ("Polygon", "MultiPolygon") and category not in CATEGORIES_WITH_POLYGONS:
             skipped_polygons.append(
                 f"{shp_path.relative_to(base_dir)}  ({len(gdf)} features, {geom_type})")
             continue
-
         gdf["category"] = category
         gdf["subcategory"] = subcategory
         gdf["source_file"] = shp_path.name
@@ -163,8 +216,8 @@ def load_shapefiles(base_dir):
         print(f"\n  Skipped {len(skipped_polygons)} polygon layer(s) (not used for now):")
         for s in skipped_polygons:
             print(f"    - {s}")
-
     return kept
+
 
 # Street trees from the yearbook CSVs (23-wards Shift-JIS + Tama UTF-8) —
 # this is the individual-tree-point data that used to live in Analysis.py
@@ -198,7 +251,7 @@ def load_csv_street_trees():
         geometry=gpd.points_from_xy(trees_all["longitude"], trees_all["latitude"]),
         crs="EPSG:4326",
     )
-    print(f"  loaded street tree CSVs  ({len(gdf):,} trees)")
+    print(f"loaded street tree CSVs  ({len(gdf):,} trees)")
     return gdf
 
 # Drinking water stations — from the yearbook CSV
@@ -210,7 +263,7 @@ def load_drinking_stations():
         "営業時間": "hours", "入場料等": "fee", "タイプ": "fountain_type",
         "稼働停止": "out_of_service", "備考": "notes",
     })
-    water["category"] = "Drinking Stations"
+    water["category"] = "Drinking Station"
     water["subcategory"] = "Drinking Station"
     water["source_file"] = "Drinking_Water_Station.csv"
     water["source_dataset"] = "yearbook_csv"
@@ -220,15 +273,15 @@ def load_drinking_stations():
         geometry=gpd.points_from_xy(water["longitude"], water["latitude"]),
         crs="EPSG:4326",
     )
-    print(f"  loaded drinking water stations  ({len(gdf)} stations)")
+    print(f"loaded drinking water stations  ({len(gdf)} stations)")
     return gdf
-
 
 
 # Run everything, group by output category, write one GeoJSON each
 if __name__ == "__main__":
-    print("=== Loading GIS shapefiles (Water_Canals, Street_Trees, "
-          "Parks_Green_Spaces, Protected_Green_Areas) ===")
+    print("Loading GIS shapefiles (Water_Canals, Street_Trees, "
+          "Parks_Green_Spaces, Protected_Green_Areas, Public_Green_Spaces, "
+          "Public_Rental_House_Greenery)")
     shape_layers = load_shapefiles(BASE_DIR)
 
     print("\nLoading CSV-sourced layers (street trees + drinking stations)")
@@ -239,9 +292,9 @@ if __name__ == "__main__":
     for gdf in shape_layers:
         by_category.setdefault(gdf["category"].iloc[0], []).append(gdf)
     by_category.setdefault("Street Trees", []).append(csv_trees)
-    by_category.setdefault("Drinking Stations", []).append(drinking)
+    by_category.setdefault("Drinking Station", []).append(drinking)
 
-    print("\nWriting GeoJSON layers")
+    print("\n=== Writing GeoJSON layers ===")
     for category, out_name in OUTPUT_FILES.items():
         parts = by_category.get(category, [])
         if not parts:
@@ -252,7 +305,7 @@ if __name__ == "__main__":
         print(f"  wrote {out_name}  ({len(combined):,} features, "
               f"geoms={sorted(combined.geom_type.unique())})")
 
-    print(f"\GeoJSON layers written to {OUT_DIR}")
+    print(f"\nDone. GeoJSON layers written to {OUT_DIR}")
     print("NOTE: none of these layers carry a 'ward' field by default except")
     print("the yearbook-CSV-sourced Street Trees rows — you'll still need a")
     print("spatial join against ward boundaries (or check for a 所在区市町村")

@@ -6,3 +6,4 @@ Public_Green_Spaces/
 
 # Large generated outputs
 outputs/*.geojson
+outputs/*.qgz

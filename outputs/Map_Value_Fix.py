@@ -1,27 +1,27 @@
 """
+Tokyo Open Data Hackathon 2026 — Heat Stroke Prevention Project
 Fix mojibake VALUES (not just column names) + add category colors
 
-Pipeline B, stage 3 of 3:
-  Map_Data.py (writes *_merged.geojson)
-    -> Map_Data_Fix_Columns.py (fixes *_merged.geojson IN PLACE)
-    -> Value_Fix.py -> Replaces the Original Files with the new one with no new naming convention.
+Pipeline B, stage 3 of 3 — all 3 stages now edit the SAME files in place,
+no _merged/_clean/_final suffixes:
+  Map_Data.py (creates the 8 files)
+    -> Map_Data_Fix_Columns.py (fixes column names in place)
+    -> Value_Fix.py (this script, fixes values + adds colors in place)
 
+Follow-up to Map_Data_Fix_Columns.py, which fixes column NAMES in place.
+This script fixes the same encoding problem where it also corrupted
+VALUES inside features — and now, like Map_Data_Fix_Columns.py, it
+overwrites the file directly. The detection heuristic only
+touches values that actually look garbled, so it's harmless to run on
+files that turn out to be clean.
 
-Follow-up to Map_Data_Fix_Columns.py, which now fixes column NAMES in
-place on the *_merged.geojson files (it used to spin off a separate
-*_clean.geojson — no longer does, one less file to track). This script
-reads those same *_merged.geojson files and fixes the encoding problem
-where it also corrupted VALUES inside features. A given
-source shapefile's corrupted values could end up in any of the 5 files
-depending on what it contains — so this scans all 5 rather than a
-hardcoded subset. The detection heuristic only touches values that
-actually look garbled, so it's harmless to run on files that turn out to
-be clean.
-
-Also adds a "marker-color" property (simplestyle-spec, recognized by
-geojson.io, GitHub previews, and many GIS tools) plus a plain "color_hex"
-property, so points/lines render in distinct colors by category without
-manual styling.
+Also adds simplestyle-spec color properties so features render in distinct
+colors by category without manual styling — "marker-color" for points,
+"stroke" for lines/polygon outlines, "fill" for polygon interiors (these
+are DIFFERENT properties per geometry type in the spec; using only
+marker-color, like an earlier version of this script did, leaves lines and
+polygons uncolored in most viewers). Also adds a plain "color_hex" field
+for QGIS/other tools that don't read simplestyle-spec at all.
 """
 
 import json
@@ -29,23 +29,33 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).parent
 FILES = [
-    "Water_Canals_merged.geojson",
-    "Street_Trees_merged.geojson",
-    "Parks_Green_Spaces_merged.geojson",
-    "Protected_Green_Spaces_merged.geojson",
-    "Drinking_Stations_merged.geojson",
+    "Water_Canals.geojson",
+    "Street_Trees.geojson",
+    "Street_Trees_Tama.geojson",
+    "Parks_Green_Spaces.geojson",
+    "Protected_Green_Spaces.geojson",
+    "Drinking_Station.geojson",
+    "Public_Facility_Greenery.geojson",
+    "Public_Housing_Greenery.geojson",
 ]
 
 # Distinct, high-contrast color per category (hex) — one entry per category
-# Map_Data.py can produce. Add an entry here if you re-enable another
-# category folder in Map_Data.py.
+# Map_Data.py can produce. Street Trees (Tama) shares the same green as
+# Street Trees since it's the same underlying thing, just split by
+# geometry — give it its own color here if you'd rather tell them apart
+# at a glance. Add an entry here if you re-enable another category folder
+# in Map_Data.py.
 CATEGORY_COLORS = {
     "Water & Canals": "#1976d2",
     "Street Trees": "#8bc34a",
+    "Street Trees (Tama)": "#8bc34a",
     "Parks & Green Spaces": "#2e7d32",
     "Protected Green Spaces": "#66bb6a",
-    "Drinking Stations": "#00bcd4",
+    "Drinking Station": "#00bcd4",
+    "Public Facility Greenery": "#ff9800",
+    "Public Housing Greenery": "#ffb300",
 }
+
 
 def looks_garbled(s):
     """Heuristic: Latin-1-range bytes with no actual Japanese characters
@@ -84,11 +94,23 @@ for filename in FILES:
                 props[key] = recovered
                 fixed_count += 1
 
-        # Color coding for visualization
+        # Color coding for visualization.
         color = CATEGORY_COLORS.get(props.get("category"), "#999999")
-        props["marker-color"] = color   # simplestyle-spec (geojson.io, GitHub)
-        props["color_hex"] = color      # plain field, for QGIS/other tools
-    with open(BASE_DIR / filename, "w", encoding="utf-8") as f:
+        props["color_hex"] = color  # plain field, works for any geometry (QGIS etc.)
+        geom_type = (feat.get("geometry") or {}).get("type")
+        if geom_type in ("Point", "MultiPoint"):
+            props["marker-color"] = color
+        elif geom_type in ("LineString", "MultiLineString"):
+            props["stroke"] = color
+            props["stroke-width"] = 2
+            props["stroke-opacity"] = 1
+        elif geom_type in ("Polygon", "MultiPolygon"):
+            props["stroke"] = color
+            props["stroke-width"] = 2
+            props["stroke-opacity"] = 1
+            props["fill"] = color
+            props["fill-opacity"] = 0.4
+
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False)
-    print(f"{filename}: recovered {fixed_count} garbled values, "
-          f"wrote {filename}")
+    print(f"{filename}: recovered {fixed_count} garbled values, updated in place")

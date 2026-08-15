@@ -1,4 +1,6 @@
 """
+Statistical yearbook cleaning + ward-level analysis script
+
 What this does:
   1. Loads all 9 Tokyo Statistical Yearbook tables (land & climate)
   2. Cleans everything: fixes encodings, strips footer text, translates
@@ -8,8 +10,18 @@ What this does:
   4. Runs the ward-level heat analysis (green coverage %, tree density,
      75-year temperature trend)
 
-Cleaned yearbook CSVs + ward-level Analysis_*.csv outputs are written to
-cleaned_data/
+Input files expected in csv/:
+  1_1_Land_Area_by_District.csv
+  1_2_Land_Use_by_District.csv
+  1_3_Land_Area_by_District_and_Category.csv
+  1_4_Land_Use_by_City_Planning_Areas.csv
+  1_5_Land_Ownership_by_Municipality_and_Owner.csv
+  1_6_Climate_Overview.csv
+  1_7_Average_Temperature_by_Observatory.csv
+  1_8_Precipitation_at_Local_Meteorological_Stations.csv
+  1_9_Seasonal_Phenomenon.csv
+
+Cleaned yearbook CSVs + ward-level Analysis_*.csv outputs are written to cleaned_data/
 """
 
 import pandas as pd
@@ -23,6 +35,7 @@ OUT_DIR.mkdir(exist_ok=True)
 
 # Placeholder tokens the yearbook uses for "no data" — convert to NaN
 NA_TOKENS = ["-", "…", "－", ""]
+
 
 # Generic cleaner for the 9 statistical yearbook tables.
 # Every one of these files follows the same template: a header row, data
@@ -51,6 +64,8 @@ def clean_yearbook_table(filename, new_columns, text_columns, out_name):
     print(f"  wrote {out_name}  ({len(df)} rows, {len(df.columns)} cols)")
     return df
 
+
+
 # 1-1  Land Area by District
 land_area = clean_yearbook_table(
     "1_1_Land_Area_by_District.csv",
@@ -60,6 +75,7 @@ land_area = clean_yearbook_table(
     text_columns=["era_year", "district_jp", "district_en", "mark"],
     out_name="1_1_Land_Area_by_District_clean.csv",
 )
+
 
 # 1-2  Land Use by District  (units: hectares, per source magnitude)
 land_use = clean_yearbook_table(
@@ -72,6 +88,7 @@ land_use = clean_yearbook_table(
     text_columns=["district_jp", "district_en", "mark"],
     out_name="1_2_Land_Use_by_District_clean.csv",
 )
+
 
 # 1-3  Land Area by District and Category (tax-assessment categories, ha)
 clean_yearbook_table(
@@ -87,6 +104,7 @@ clean_yearbook_table(
     text_columns=["era_year", "district_jp", "district_en"],
     out_name="1_3_Land_Area_by_District_and_Category_clean.csv",
 )
+
 
 # 1-4  Land Use by City Planning Areas (zoning, ha)
 clean_yearbook_table(
@@ -105,6 +123,7 @@ clean_yearbook_table(
     out_name="1_4_Land_Use_by_City_Planning_Areas_clean.csv",
 )
 
+
 # 1-5  Land Ownership by Municipality and Owner (2023, ha)
 clean_yearbook_table(
     "1_5_Land_Ownership_by_Municipality_and_Owner.csv",
@@ -115,6 +134,7 @@ clean_yearbook_table(
     text_columns=["district_jp", "district_en", "mark"],
     out_name="1_5_Land_Ownership_by_Municipality_and_Owner_clean.csv",
 )
+
 
 # 1-6  Climate Overview (1950–2024, annual + monthly rows)
 climate = clean_yearbook_table(
@@ -137,6 +157,7 @@ climate = clean_yearbook_table(
     out_name="1_6_Climate_Overview_clean.csv",
 )
 
+
 # 1-7  Average Temperature by Observatory (wide format, one row per station)
 clean_yearbook_table(
     "1_7_Average_Temperature_by_Observatory.csv",
@@ -151,6 +172,7 @@ clean_yearbook_table(
     out_name="1_7_Average_Temperature_by_Observatory_clean.csv",
 )
 
+
 # 1-8  Precipitation at Local Meteorological Stations (2024, monthly)
 clean_yearbook_table(
     "1_8_Precipitation_at_Local_Meteorological_Stations.csv",
@@ -163,6 +185,7 @@ clean_yearbook_table(
     out_name="1_8_Precipitation_at_Local_Meteorological_Stations_clean.csv",
 )
 
+
 # 1-9  Seasonal Phenomenon (first/last frost, snow, freezing dates)
 clean_yearbook_table(
     "1_9_Seasonal_Phenomenon.csv",
@@ -174,10 +197,13 @@ clean_yearbook_table(
                   "first_freeze_date", "last_freeze_date"],
     out_name="1_9_Seasonal_Phenomenon_clean.csv",
 )
+
 print()
 
-# Street trees GeoJSON is needed for the ward-level tree-density analysis
-tree_geojson = MAP_DIR / "Street_Trees_merged.geojson"
+# STREET TREES — no longer loaded from CSV here. Map_Data.py owns tree data
+# end to end now (CSV + GIS shapefile sources merged into one GeoJSON); we
+# just read its output back in for the ward-density analysis below.
+tree_geojson = MAP_DIR / "Street_Trees.geojson"
 if not tree_geojson.exists():
     raise FileNotFoundError(
         f"{tree_geojson} not found — run Map_Data.py first, it produces the "
@@ -206,7 +232,8 @@ print("(Note: 'parks_ha' = designated parks only, not total greenery/forest —"
 print(" rural wards score low here despite having lots of natural forest.)\n")
 
 
-# ANALYSIS 2 — Street tree density per km² by ward (23 wards only — Tama trees have no ward field in the source data)
+# ANALYSIS 2 — Street tree density per km² by ward (23 wards only — Tama
+# trees have no ward field in the source data)
 tree_counts = (trees_gdf[trees_gdf["ward"].notna()]
                .groupby("ward").size().rename("tree_count").reset_index())
 # 'ward' here is still in Japanese (from the 23-ward source file) — map to

@@ -1,4 +1,5 @@
 """
+Chart generation script
 Reads the CLEANED English CSVs (produced by Analysis.py) plus the tree
 GeoJSON (produced by Map_Data.py) and generates a set of presentation-ready
 charts (PNG, 150 DPI) that build a decision narrative:
@@ -11,12 +12,12 @@ charts (PNG, 150 DPI) that build a decision narrative:
   7. What tree species dominate the canopy?         -> chart 7
   8. Is winter itself shrinking (extra warming evidence)? -> chart 8
 
-RUN ORDER: Map_Data.py -> Analysis.py -> Green_Data_Fix_Columns.py ->
-Value_Fix.py -> EDA.py (this script). Chart 7 reads the fully mojibake-
-fixed tree layer (Street_Trees_final.geojson) rather than the raw
-Map_Data.py output, since species names are exactly the kind of field that
-can come out garbled from the GIS-sourced shapefile rows — so it needs the
-full Pipeline B chain to have already run, not just Map_Data.py.
+RUN ORDER: Map_Data.py -> Analysis.py -> Map_Data_Fix_Columns.py ->
+Value_Fix.py -> EDA.py (this script). Chart 7 reads Street_Trees.geojson
+AFTER the full Pipeline B chain has run on it (Map_Data_Fix_Columns.py and
+Value_Fix.py both edit it in place — no separate "_final" file anymore),
+since species names are exactly the kind of field that can come out
+garbled from the GIS-sourced shapefile rows.
 """
 
 import pandas as pd
@@ -68,6 +69,7 @@ fig.savefig(OUT_DIR / "01_annual_temperature_trend.png")
 plt.close(fig)
 
 
+
 # CHART 2 — When during the year is heat risk highest? (2024 monthly temp
 # vs precipitation, dual axis — high temp + low rain = highest WBGT risk)
 t7 = pd.read_csv(IN_DIR / "1_7_Average_Temperature_by_Observatory_clean.csv")
@@ -94,6 +96,7 @@ fig.savefig(OUT_DIR / "02_monthly_temp_vs_precipitation_2024.png")
 plt.close(fig)
 
 
+
 # CHART 3 — Which of the 23 wards have the least park/green relief?
 green = pd.read_csv(IN_DIR / "Analysis_Ward_Green_Coverage.csv")
 green_23 = green[green["district_en"].isin(WARDS_23)].sort_values("green_ratio_pct")
@@ -109,6 +112,8 @@ fig.tight_layout()
 fig.savefig(OUT_DIR / "03_ward_green_coverage.png")
 plt.close(fig)
 
+
+
 # CHART 4 — Which wards have the fewest street trees (shade) per km²?
 density = pd.read_csv(IN_DIR / "Analysis_Ward_Tree_Density.csv")
 density_23 = density[density["district_en"].isin(WARDS_23)].sort_values("trees_per_km2")
@@ -123,6 +128,7 @@ ax.set_xlabel("Street Trees per km²")
 fig.tight_layout()
 fig.savefig(OUT_DIR / "04_ward_tree_density.png")
 plt.close(fig)
+
 
 
 # CHART 5 — Priority map: wards weak on BOTH parks AND street trees
@@ -150,6 +156,7 @@ plt.close(fig)
 
 priority_wards = combo[(combo["green_ratio_pct"] < med_green) &
                         (combo["trees_per_km2"] < med_tree)]["district_en"].tolist()
+
 
 
 # CHART 6 — How "hardscaped" is each ward? (land use composition, % stacked)
@@ -181,8 +188,9 @@ fig.savefig(OUT_DIR / "06_ward_land_use_composition.png")
 plt.close(fig)
 
 
+
 # CHART 7 — Which tree species dominate the citywide canopy?
-trees = gpd.read_file(MAP_DIR / "Street_Trees_merged.geojson")
+trees = gpd.read_file(MAP_DIR / "Street_Trees.geojson")
 top_species = trees["species"].value_counts().head(15)
 
 fig, ax = plt.subplots(figsize=(9, 7))
@@ -193,6 +201,7 @@ ax.set_xlabel("Number of Trees")
 fig.tight_layout()
 fig.savefig(OUT_DIR / "07_top_tree_species.png")
 plt.close(fig)
+
 
 
 # CHART 8 — Is winter itself shrinking? (secondary warming evidence)
