@@ -61,7 +61,13 @@ SECRET_KEY = os.getenv("R2_SECRET_ACCESS_KEY")
 # bucket" days later.
 BUCKET = os.getenv("R2_BUCKET_NAME", "tokyo-heat-map")
 
-DEFAULT_PREFIX = "cleaned_data/"
+# Mirrors wrangler.py's UPLOAD_TARGETS + python upload.
+# Each R2 prefix maps to the local folder it should land in.
+FETCH_TARGETS = {
+    "cleaned_data/": BASE_DIR / "cleaned_data",
+    "outputs/":      BASE_DIR / "outputs",
+    "python/":       BASE_DIR,           # *.py files go back to repo root
+}
 
 # Anything larger is skipped unless --big or --only names it. Nothing this
 # size belongs in the frontend, and only whoever is working on that
@@ -122,18 +128,14 @@ def human(n: float) -> str:
 
 
 def local_target(key: str, prefix: str) -> Path:
-    """Maps an R2 key back to where it belongs locally, preserving
-    everything under the prefix as real subfolders. e.g.
-      raw/csv/1_1_Land_Area_by_District.csv  -> BASE_DIR/csv/1_1_Land_Area_by_District.csv
-      raw/Water_Canals/08_水系/.../河川・運河.shp -> BASE_DIR/Water_Canals/08_水系/.../河川・運河.shp
-      raw/osm_raw/kanto-latest.osm.pbf        -> BASE_DIR/osm_raw/kanto-latest.osm.pbf
-    Keeping only the filename (Path(key).name) would silently flatten every
-    shapefile's category folder into one pile - Map_Data.py identifies each
-    shapefile's category from its top-level folder name
-    (shp_path.relative_to(base_dir).parts[0]), so a flattened download makes
-    every shapefile invisible to it."""
+    """Maps an R2 key to its local path using FETCH_TARGETS.
+      cleaned_data/charts/foo.png         -> BASE_DIR/cleaned_data/charts/foo.png
+      outputs/Street_Trees.geojson        -> BASE_DIR/outputs/Street_Trees.geojson
+      python/Analysis.py                  -> BASE_DIR/Analysis.py
+    Falls back to BASE_DIR/<prefix>/<rel> for unknown prefixes."""
+    local_base = FETCH_TARGETS.get(prefix, BASE_DIR / prefix.rstrip("/"))
     rel = PurePosixPath(key).relative_to(prefix)
-    return BASE_DIR / Path(*rel.parts)
+    return local_base / Path(*rel.parts)
 
 
 def download(s3, obj: dict, prefix: str, force: bool) -> str:
@@ -183,80 +185,77 @@ def main() -> int:
     )
     ap.add_argument(
         "--prefix",
-        default=DEFAULT_PREFIX,
-        help=f"bucket prefix to mirror (default: {DEFAULT_PREFIX})",
+        metavar="PREFIX",
+        help="fetch only this bucket prefix (default: all three targets)",
     )
     args = ap.parse_args()
 
-    prefix = args.prefix if args.prefix.endswith("/") else args.prefix + "/"
+    prefixes = (
+        [args.prefix if args.prefix.endswith("/") else args.prefix + "/"]
+        if args.prefix
+        else list(FETCH_TARGETS.keys())
+    )
 
     try:
         s3 = client()
-        objects = list_objects(s3, prefix)
     except NoCredentialsError:
         print("Credentials rejected. Check .env.")
         return 1
-    except ClientError as e:
-        print(f"Could not reach the bucket: {e}")
-        print(f"Is R2_BUCKET_NAME correct? Currently: {BUCKET}")
-        return 1
-
-    if not objects:
-        print(f"Nothing under '{prefix}' in bucket '{BUCKET}'.")
-        print("Has anyone uploaded yet? Check the prefix.")
-        return 1
-
-    # --only is an explicit request, so it overrides the size cap for the
-    # files it matches. Asking for a file by name and being told it's too
-    # big would just be annoying.
-    if args.only:
-        objects = [o for o in objects if args.only.lower() in o["Key"].lower()]
-        if not objects:
-            print(f"No keys under '{prefix}' contain '{args.only}'.")
-            return 1
 
     cap = SIZE_CAP_MB * 1024 * 1024
     allow_big = args.big or bool(args.only)
-
-    total = sum(o["Size"] for o in objects)
-    print(f"{len(objects)} objects, {human(total)} total\n")
-
-    if args.list:
-        for o in sorted(objects, key=lambda x: x["Key"]):
-            flag = "  [OVER CAP]" if o["Size"] > cap and not allow_big else ""
-            dest = local_target(o["Key"], prefix).relative_to(BASE_DIR)
-            print(f"  {human(o['Size']):>10}  {o['Key']}  ->  {dest}{flag}")
-        return 0
-
     counts = {"downloaded": 0, "skipped": 0, "too_big": 0, "failed": 0}
     skipped_bytes = 0
 
-    for obj in sorted(objects, key=lambda x: x["Key"]):
-        if obj["Size"] > cap and not allow_big:
-            dest = local_target(obj["Key"], prefix).relative_to(BASE_DIR)
-            print(f"  too big   {dest}  ({human(obj['Size'])})  — use --big or --only")
-            counts["too_big"] += 1
-            skipped_bytes += obj["Size"]
+    for prefix in prefixes:
+        try:
+            objects = list_objects(s3, prefix)
+        except ClientError as e:
+            print(f"Could not reach the bucket: {e}")
+            print(f"Is R2_BUCKET_NAME correct? Currently: {BUCKET}")
+            return 1
+
+        if not objects:
+            print(f"Nothing under '{prefix}' in bucket '{BUCKET}' — skipping.")
             continue
-        counts[download(s3, obj, prefix, args.force)] += 1
 
-    print(
-        f"\ndownloaded {counts['downloaded']}  "
-        f"skipped {counts['skipped']}  "
-        f"too_big {counts['too_big']}  "
-        f"failed {counts['failed']}"
-    )
+        if args.only:
+            objects = [o for o in objects if args.only.lower() in o["Key"].lower()]
+            if not objects:
+                continue
 
-    if counts["too_big"]:
-        print(f"Skipped {human(skipped_bytes)} of oversized objects (--big to include).")
+        total = sum(o["Size"] for o in objects)
+        print(f"\n[{prefix}]  {len(objects)} objects, {human(total)} total")
 
-    if counts["failed"]:
-        print("Some files failed. Re-run to retry just those.")
-        return 1
+        if args.list:
+            for o in sorted(objects, key=lambda x: x["Key"]):
+                flag = "  [OVER CAP]" if o["Size"] > cap and not allow_big else ""
+                dest = local_target(o["Key"], prefix).relative_to(BASE_DIR)
+                print(f"  {human(o['Size']):>10}  {o['Key']}  ->  {dest}{flag}")
+            continue
 
-    print(f"\nFiles are placed under {BASE_DIR}/, mirroring each key's path under '{prefix}'")
-    print("(raw/csv/... -> csv/..., raw/Water_Canals/... -> Water_Canals/..., etc).")
-    print("Raw data is never edited in place - scripts read from here and write to cleaned_data/.")
+        for obj in sorted(objects, key=lambda x: x["Key"]):
+            if obj["Size"] > cap and not allow_big:
+                dest = local_target(obj["Key"], prefix).relative_to(BASE_DIR)
+                print(f"  too big   {dest}  ({human(obj['Size'])})  — use --big or --only")
+                counts["too_big"] += 1
+                skipped_bytes += obj["Size"]
+                continue
+            counts[download(s3, obj, prefix, args.force)] += 1
+
+    if not args.list:
+        print(
+            f"\ndownloaded {counts['downloaded']}  "
+            f"skipped {counts['skipped']}  "
+            f"too_big {counts['too_big']}  "
+            f"failed {counts['failed']}"
+        )
+        if counts["too_big"]:
+            print(f"Skipped {human(skipped_bytes)} of oversized objects (--big to include).")
+        if counts["failed"]:
+            print("Some files failed. Re-run to retry just those.")
+            return 1
+
     return 0
 
 
