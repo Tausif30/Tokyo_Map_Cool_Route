@@ -32,3 +32,4 @@ outputs/
 node_modules/
 dist/
 .wrangler/
+.cache/

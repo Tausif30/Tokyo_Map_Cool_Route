@@ -1,7 +1,23 @@
-boto3
-geopandas
-matplotlib
+# Data processing, GIS, and charts
 pandas
-python-dotenv
-requests
+geopandas
 shapely
+pyproj
+matplotlib
+
+# Walking-network routing
+networkx
+osmnx
+scipy
+
+# HTTP API
+fastapi
+uvicorn
+requests
+
+# Cloudflare R2 data transfer and environment configuration
+boto3
+python-dotenv
+
+# Optional local desktop alerts used by WBGT_Monitor.py
+plyer
