@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Heat Stroke Safety Guide — Tokyo Fire Department</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Noto+Sans+JP:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#1b2430;
+    --ink-soft:#4c5768;
+    --paper:#f3f5f4;
+    --card:#ffffff;
+    --line:#d8dcd6;
+    --danger:#d1495b;
+    --danger-soft:#fbe9ec;
+    --blue:#5b9bd5;
+    --blue-soft:#eaf2fa;
+    --green:#2e7d32;
+    --green-soft:#eaf3ea;
+    --amber:#f4a259;
+    --amber-soft:#fdf1e4;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(1200px 500px at 15% -10%, rgba(91,155,213,0.10), transparent 60%),
+      radial-gradient(1000px 500px at 100% 0%, rgba(209,73,91,0.08), transparent 55%),
+      var(--paper);
+    font-family:'Inter', 'Noto Sans JP', sans-serif;
+    color:var(--ink);
+    -webkit-font-smoothing:antialiased;
+  }
+  .jp{font-family:'Noto Sans JP', sans-serif;}
+  .page{max-width:1120px;margin:0 auto;padding:44px 28px 64px;}
+
+  /* ---------- Header ---------- */
+  header{margin-bottom:30px;}
+  .eyebrow{
+    display:inline-flex;align-items:center;gap:8px;
+    font-family:'Space Grotesk',sans-serif;
+    font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--danger);font-weight:600;
+    background:var(--danger-soft);
+    border:1px solid rgba(209,73,91,0.25);
+    padding:6px 12px;border-radius:999px;
+  }
+  .eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--danger);animation:pulse 2s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
+  h1{
+    font-family:'Space Grotesk',sans-serif;
+    font-weight:700;
+    font-size:clamp(28px,4vw,42px);
+    line-height:1.08;
+    margin:16px 0 4px;
+    letter-spacing:-0.01em;
+  }
+  h1 .jp{display:block;font-size:.52em;font-weight:500;color:var(--ink-soft);margin-top:6px;letter-spacing:0;}
+  .subhead{font-size:16px;color:var(--ink-soft);max-width:640px;line-height:1.55;margin:14px 0 0;}
+  .source-line{font-size:12.5px;color:var(--ink-soft);margin-top:10px;}
+  .source-line a{color:var(--ink-soft);}
+
+  /* ---------- Stat strip ---------- */
+  .stats{
+    display:grid;grid-template-columns:repeat(4,1fr);gap:10px;
+    margin:26px 0 6px;
+  }
+  .stat{
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:14px 16px;
+  }
+  .stat .num{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:22px;color:var(--danger);}
+  .stat .lbl{font-size:12.5px;color:var(--ink-soft);line-height:1.4;margin-top:3px;}
+
+  /* ---------- Route header (signature element) ---------- */
+  .route{
+    position:relative;
+    display:grid;grid-template-columns:1fr 1fr;
+    margin:42px 0 0;
+    padding-top:0;
+  }
+  .route::before{
+    content:"";position:absolute;top:13px;left:6%;right:6%;height:3px;
+    background:repeating-linear-gradient(90deg, var(--line) 0 10px, transparent 10px 16px);
+  }
+  .stop{display:flex;flex-direction:column;align-items:center;position:relative;z-index:1;}
+  .stop .marker{
+    width:26px;height:26px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:12px;color:#fff;
+    border:4px solid var(--paper);
+  }
+  .stop.prevent .marker{background:var(--green);}
+  .stop.respond .marker{background:var(--danger);}
+  .stop .stop-label{
+    margin-top:10px;font-family:'Space Grotesk',sans-serif;font-weight:700;
+    font-size:13px;letter-spacing:.09em;text-transform:uppercase;
+  }
+  .stop.prevent .stop-label{color:var(--green);}
+  .stop.respond .stop-label{color:var(--danger);}
+  .stop .stop-jp{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+
+  /* ---------- Two-column grid ---------- */
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:16px;}
+  .col{
+    background:var(--card);border:1px solid var(--line);border-radius:18px;
+    padding:22px 22px 26px;
+  }
+  .col-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:16px;}
+  .col-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:19px;}
+  .col.prevent{border-top:4px solid var(--green);}
+  .col.respond{border-top:4px solid var(--danger);}
+
+  /* checklist items (prevention) */
+  .item{display:flex;gap:12px;padding:13px 0;border-top:1px solid var(--line);}
+  .item:first-of-type{border-top:none;}
+  .check{
+    flex:0 0 22px;width:22px;height:22px;border-radius:6px;
+    border:2px solid var(--green);margin-top:2px;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .check svg{width:13px;height:13px;}
+  .item-title{font-weight:700;font-size:14.5px;}
+  .item-jp{font-size:12px;color:var(--ink-soft);margin:1px 0 5px;}
+  .item-desc{font-size:13.5px;color:var(--ink-soft);line-height:1.5;}
+
+  /* symptom ladder */
+  .ladder-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);margin:2px 0 10px;}
+  .tier{border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;gap:10px;align-items:flex-start;}
+  .tier .tag{flex:0 0 auto;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:11px;letter-spacing:.05em;text-transform:uppercase;padding:3px 8px;border-radius:999px;color:#fff;white-space:nowrap;margin-top:1px;}
+  .tier.mild{background:var(--amber-soft);}
+  .tier.mild .tag{background:var(--amber);}
+  .tier.moderate{background:#fdece0;}
+  .tier.moderate .tag{background:#e8823a;}
+  .tier.severe{background:var(--danger-soft);}
+  .tier.severe .tag{background:var(--danger);}
+  .tier-text{font-size:13.5px;line-height:1.5;}
+  .tier-text b{font-weight:700;}
+  .tier-jp{font-size:11.5px;color:var(--ink-soft);margin-top:2px;}
+
+  .divider{height:1px;background:var(--line);margin:18px 0 16px;}
+
+  /* first aid steps */
+  .step{display:flex;gap:12px;margin-bottom:12px;}
+  .step-num{
+    flex:0 0 24px;height:24px;border-radius:50%;background:var(--ink);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk',sans-serif;
+    font-weight:700;font-size:12px;margin-top:1px;
+  }
+  .step.urgent .step-num{background:var(--danger);}
+  .step-title{font-weight:700;font-size:14px;}
+  .step-desc{font-size:13.5px;color:var(--ink-soft);line-height:1.5;margin-top:2px;}
+  .branch{
+    border:1.5px dashed var(--line);border-radius:10px;padding:10px 12px;margin:6px 0 6px 36px;
+    font-size:13px;color:var(--ink-soft);
+  }
+  .branch b{color:var(--ink);}
+
+  .call119{
+    margin-top:14px;background:var(--ink);color:#fff;border-radius:12px;
+    padding:14px 16px;display:flex;align-items:center;gap:14px;
+  }
+  .call119 .num{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:26px;color:var(--danger);letter-spacing:.02em;}
+  .call119 .txt{font-size:13px;line-height:1.5;color:#dfe3ea;}
+  .call119 .txt b{color:#fff;}
+
+  footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);}
+  .disclaimer{font-size:12px;color:var(--ink-soft);line-height:1.6;max-width:820px;}
+  .disclaimer b{color:var(--ink);}
+  .credit{font-size:11.5px;color:#9aa2ac;margin-top:10px;}
+  .credit a{color:#9aa2ac;}
+
+  @media (max-width:820px){
+    .stats{grid-template-columns:repeat(2,1fr);}
+    .grid{grid-template-columns:1fr;}
+    .route::before{display:none;}
+    .route{grid-template-columns:1fr;gap:10px;}
+    .stop{flex-direction:row;gap:10px;}
+    .stop .stop-label,.stop .stop-jp{margin:0;}
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <span class="eyebrow"><span class="dot"></span>東京消防庁データより · Based on Tokyo Fire Department data (2025)</span>
+    <h1>Heat Stroke Safety Guide
+      <span class="jp">熱中症セーフティガイド — 予防と応急手当</span>
+    </h1>
+    <p class="subhead">A field-ready checklist for residents and visitors, built from Tokyo Fire Department's official prevention guidance and emergency-transport statistics for summer 2025 (Reiwa 7).</p>
+    <p class="source-line">Source: 東京消防庁「熱中症に注意」 tfd.metro.tokyo.lg.jp/lfe/nichijo/heat/ — pages: gaiyou / toukei / yobou / teate</p>
+  </header>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="num">9,125</div>
+      <div class="lbl">people transported by ambulance for heat stroke, Jun–Sep 2025 — an all-time record, up from 7,996 in 2024</div>
+    </div>
+    <div class="stat">
+      <div class="num">52.6%</div>
+      <div class="lbl">were age 65+; 76% of those were 75+ (late-stage elderly)</div>
+    </div>
+    <div class="stat">
+      <div class="num">39 days</div>
+      <div class="lbl">had 100+ people transported in a single day; the worst single day (Aug 6) hit 340</div>
+    </div>
+    <div class="stat">
+      <div class="num">71%</div>
+      <div class="lbl">of cases started at home (36.0%) or on a street/transit route (34.9%)</div>
+    </div>
+  </div>
+
+  <div class="route">
+    <div class="stop prevent">
+      <div class="marker">1</div>
+      <div class="stop-label">Prevent</div>
+      <div class="stop-jp">予防対策</div>
+    </div>
+    <div class="stop respond">
+      <div class="marker">2</div>
+      <div class="stop-label">Respond</div>
+      <div class="stop-jp">症状と応急手当</div>
+    </div>
+  </div>
+
+  <div class="grid">
+
+    <!-- ============ PREVENTION ============ -->
+    <div class="col prevent">
+      <div class="col-head">
+        <div class="col-title">Prevention Measures</div>
+      </div>
+
+      <div class="item">
+        <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="#2e7d32" stroke-width="3" stroke-linecap="round"><path d="M4 12l5 5L20 6"/></svg></div>
+        <div>
+          <div class="item-title">Build heat tolerance early <span class="item-jp jp">暑熱順化</span></div>
+          <div class="item-desc">Before the real heat hits, get into a habit of sweating on purpose — regular baths and walks condition your body to handle high temperatures.</div>
+        </div>
+      </div>
+
+      <div class="item">
+        <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="#2e7d32" stroke-width="3" stroke-linecap="round"><path d="M4 12l5 5L20 6"/></svg></div>
+        <div>
+          <div class="item-title">Avoid heat, humidity & direct sun <span class="item-jp jp">高温・多湿・直射日光を避ける</span></div>
+          <div class="item-desc">Outdoors: use cooling gear, stick to shaded paths, and take breaks often. Indoors: set the AC to match room conditions and block direct sun with curtains or blinds.</div>
+        </div>
+      </div>
+
+      <div class="item">
+        <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="#2e7d32" stroke-width="3" stroke-linecap="round"><path d="M4 12l5 5L20 6"/></svg></div>
+        <div>
+          <div class="item-title">Hydrate on a schedule, not on thirst <span class="item-jp jp">計画的・こまめな水分補給</span></div>
+          <div class="item-desc">Drink before you feel thirsty — thirst lags behind dehydration, especially for elderly people. Hydrate before bed, after waking, and around bathing. Replace salt too after heavy sweating.</div>
+        </div>
+      </div>
+
+      <div class="item">
+        <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="#2e7d32" stroke-width="3" stroke-linecap="round"><path d="M4 12l5 5L20 6"/></svg></div>
+        <div>
+          <div class="item-title">Plan rest breaks for exercise & events <span class="item-jp jp">運動時等の計画的休憩</span></div>
+          <div class="item-desc">Athletes, organizers, and instructors should all know the signs of heat stroke. Restock with sports drinks after heavy sweating — even spectators cheering in the sun need to stay hydrated.</div>
+        </div>
+      </div>
+
+      <div class="item">
+        <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="#2e7d32" stroke-width="3" stroke-linecap="round"><path d="M4 12l5 5L20 6"/></svg></div>
+        <div>
+          <div class="item-title">Never leave a child alone in a car <span class="item-jp jp">車内にこどもだけにしない</span></div>
+          <div class="item-desc">Car interiors heat up dangerously fast, even for what feels like "just a minute." Never leave a child alone inside a vehicle — not even briefly.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SYMPTOMS + FIRST AID ============ -->
+    <div class="col respond">
+      <div class="col-head">
+        <div class="col-title">Symptoms &amp; First Aid</div>
+      </div>
+
+      <div class="ladder-title">Know the severity</div>
+
+      <div class="tier mild">
+        <span class="tag">Mild</span>
+        <div class="tier-text"><b>Dizziness on standing, muscle cramps, heavy sweating.</b>
+          <div class="tier-jp jp">立ちくらみ・筋肉痛（こむら返り）・大量の発汗</div>
+        </div>
+      </div>
+      <div class="tier moderate">
+        <span class="tag">Moderate</span>
+        <div class="tier-text"><b>Headache, nausea or vomiting, fatigue, trouble concentrating.</b>
+          <div class="tier-jp jp">頭痛・吐き気/嘔吐・倦怠感・集中力低下</div>
+        </div>
+      </div>
+      <div class="tier severe">
+        <span class="tag">Severe</span>
+        <div class="tier-text"><b>Confusion or impaired consciousness, convulsions, can't walk straight, very high body temperature.</b>
+          <div class="tier-jp jp">意識障害・けいれん・歩行障害・高体温</div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="ladder-title">First aid, step by step</div>
+
+      <div class="step">
+        <div class="step-num">1</div>
+        <div>
+          <div class="step-title">Check if they respond normally</div>
+          <div class="step-desc">Call their name and ask a simple question. Is the response normal, confused, or absent?</div>
+        </div>
+      </div>
+
+      <div class="branch">
+        <b>If response is confused or absent →</b> call an ambulance immediately. While waiting: move them to shade/AC, loosen or remove excess clothing, and cool the neck, armpits, and groin with ice or cold wet cloths. Do <b>not</b> try to make them drink — they could choke.
+      </div>
+
+      <div class="step">
+        <div class="step-num">2</div>
+        <div>
+          <div class="step-title">If they respond normally: cool them down</div>
+          <div class="step-desc">Move to a cool, shaded, or air-conditioned spot. Loosen clothing and cool the skin — fan them, use cold water, or apply ice packs to the neck, armpits, and groin.</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">3</div>
+        <div>
+          <div class="step-title">Rehydrate with salt</div>
+          <div class="step-desc">If they can drink unaided, give water with a pinch of salt, an oral rehydration solution, or a sports drink.</div>
+        </div>
+      </div>
+
+      <div class="step urgent">
+        <div class="step-num">4</div>
+        <div>
+          <div class="step-title">Reassess — don't leave them alone</div>
+          <div class="step-desc"><b>Improving and drinking fine on their own</b> → keep resting in the cool spot with someone watching them. <b>Not improving, or can't drink unaided</b> → call an ambulance now.</div>
+        </div>
+      </div>
+
+      <div class="call119">
+        <div class="num">119</div>
+        <div class="txt"><b>When in doubt, call.</b> Heat stroke can turn fatal quickly — treat it as an emergency, not something to wait out.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <footer>
+    <p class="disclaimer"><b>General public-safety information</b>, adapted from Tokyo Fire Department (東京消防庁) prevention guidance and the first-aid protocol it references from Japan's Ministry of the Environment Heat Illness Environmental Health Manual. This is not medical advice and does not replace professional care — always call <b>119</b> (ambulance/fire) in a real emergency.</p>
+    <p class="credit">Data &amp; protocol: <a href="https://www.tfd.metro.tokyo.lg.jp/lfe/nichijo/heat/index.html" target="_blank" rel="noopener">tfd.metro.tokyo.lg.jp/lfe/nichijo/heat</a> · Tokyo Open Data Hackathon 2026 — Heat Stroke Prevention Project</p>
+  </footer>
+
+</div>
+</body>
+</html>
