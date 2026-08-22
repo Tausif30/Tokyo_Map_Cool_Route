@@ -1,0 +1,7 @@
+boto3
+geopandas
+matplotlib
+pandas
+python-dotenv
+requests
+shapely

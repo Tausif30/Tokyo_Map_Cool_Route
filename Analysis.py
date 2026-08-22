@@ -24,13 +24,15 @@ Input files expected in csv/:
 Cleaned yearbook CSVs + ward-level Analysis_*.csv outputs are written to cleaned_data/
 """
 
-import pandas as pd
-import geopandas as gpd
 from pathlib import Path
 
-DATA_DIR = Path(r"E:\Tokyo_Metropolitan_Project\csv")
-OUT_DIR = Path(r"E:\Tokyo_Metropolitan_Project\cleaned_data")
-MAP_DIR = Path(r"E:\Tokyo_Metropolitan_Project\outputs")  # Map_Data.py's output folder
+import geopandas as gpd
+import pandas as pd
+
+BASE_DIR = Path(__file__).parent
+DATA_DIR = BASE_DIR / "csv"
+OUT_DIR = BASE_DIR / "cleaned_data"
+MAP_DIR = BASE_DIR / "outputs"  # Map_Data.py's output folder
 OUT_DIR.mkdir(exist_ok=True)
 
 # Placeholder tokens the yearbook uses for "no data" — convert to NaN
