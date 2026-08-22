@@ -8,6 +8,7 @@ __pycache__/
 *.pyo
 .env
 .DS_Store
+.qgz
 
 # Raw source data — lives in R2, fetched by scripts/fetch_raw.py
 csv/
@@ -21,13 +22,14 @@ Protected_Green_Areas/
 Public_Rental_House_Greenery/
 Urban_Plan_Green_Spaces/
 Water_Canals/
+osm_raw/
 
 # Intermediate outputs — regenerable, may be large
 cleaned_data/
 
 # Charts and figures for the pitch
 outputs/
-
+osm_raw/kanto-latest.osm.pbf
 # Frontend
 node_modules/
 dist/

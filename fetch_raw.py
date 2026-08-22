@@ -1,5 +1,8 @@
 """
-Pull raw data files from the team's R2 bucket into ./csv/.
+Pull raw data files from the team's R2 bucket into the project, restoring
+each file to the same relative path it has locally (csv/..., Water_Canals/...,
+osm_raw/..., etc. - see directory-tree.txt) so Map_Data.py's category-folder
+scanning and everything else that reads from csv/ just works.
 
 Why this exists:
     Raw source files are too large for Git. They live in R2; this
@@ -9,14 +12,14 @@ Why this exists:
 Setup (each team member, once):
     pip install boto3 python-dotenv
     cp .env.example .env      # then fill in the credentials
-    python scripts/fetch_raw.py
+    python fetch_raw.py
 
 NEVER commit .env.
 
 Usage:
-    python scripts/fetch_raw.py              # skip files already present
-    python scripts/fetch_raw.py --force      # re-download everything
-    python scripts/fetch_raw.py --list       # show what's in the bucket
+    python fetch_raw.py              # skip files already present
+    python fetch_raw.py --force      # re-download everything
+    python fetch_raw.py --list       # show what's in the bucket
 """
 
 import argparse
@@ -24,23 +27,31 @@ import gzip
 import os
 import shutil
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
 from dotenv import load_dotenv
 
-# Anchor to the repo, not the working directory. Drop one .parent if
-# this script sits at the repo root rather than in scripts/.
-BASE_DIR = Path(__file__).resolve().parent.parent
-DEST = BASE_DIR / "csv"
+# fetch_raw.py sits at the repo root, next to Map_Data.py / wrangler.py /
+# etc. (per directory-tree.txt), not in a scripts/ subfolder - one .parent,
+# not two. (With the old two-.parent version, BASE_DIR resolved to the
+# folder ABOVE the project, so .env was never found and everything would
+# have downloaded into a sibling folder outside the repo entirely.)
+BASE_DIR = Path(__file__).resolve().parent
 
 load_dotenv(BASE_DIR / ".env")
 
 ACCOUNT_ID = os.getenv("R2_ACCOUNT_ID")
 ACCESS_KEY = os.getenv("R2_ACCESS_KEY_ID")
 SECRET_KEY = os.getenv("R2_SECRET_ACCESS_KEY")
-BUCKET = os.getenv("R2_BUCKET", "cool-route-raw")
+# Renamed from R2_BUCKET to R2_BUCKET_NAME to match wrangler.py's own env
+# var. Previously these two scripts read two different variable names, so
+# a .env with only one of them set would leave the other script silently
+# falling back to its own default bucket instead of erroring - the kind of
+# bug that only shows up as "why is fetch_raw pulling from the wrong
+# bucket" days later.
+BUCKET = os.getenv("R2_BUCKET_NAME", "cool-route-raw")
 
 PREFIX = "raw/"
 
@@ -71,14 +82,18 @@ def client():
 
 
 def list_objects(s3) -> list[dict]:
-    """Every object under PREFIX. Paginates - buckets can exceed 1000 keys."""
+    """Every real object under PREFIX. Paginates - buckets can exceed 1000
+    keys. Skips zero-byte 'folder placeholder' objects (key ends in '/')
+    that some S3-compatible bucket UIs create when you make a folder -
+    those aren't files to download, and downloading one would land at
+    BASE_DIR itself rather than inside it."""
     objects, token = [], None
     while True:
         kwargs = {"Bucket": BUCKET, "Prefix": PREFIX}
         if token:
             kwargs["ContinuationToken"] = token
         resp = s3.list_objects_v2(**kwargs)
-        objects.extend(resp.get("Contents", []))
+        objects.extend(o for o in resp.get("Contents", []) if not o["Key"].endswith("/"))
         if not resp.get("IsTruncated"):
             break
         token = resp["NextContinuationToken"]
@@ -93,31 +108,48 @@ def human(n: float) -> str:
     return f"{n:.1f} TB"
 
 
+def local_target(key: str) -> Path:
+    """Maps an R2 key back to where it belongs locally, preserving
+    everything under PREFIX as real subfolders. e.g.
+      raw/csv/1_1_Land_Area_by_District.csv  -> BASE_DIR/csv/1_1_Land_Area_by_District.csv
+      raw/Water_Canals/08_水系/.../河川・運河.shp -> BASE_DIR/Water_Canals/08_水系/.../河川・運河.shp
+      raw/osm_raw/kanto-latest.osm.pbf        -> BASE_DIR/osm_raw/kanto-latest.osm.pbf
+    The previous version only kept the filename (Path(key).name), which
+    silently flattened every shapefile's category folder into one pile -
+    Map_Data.py identifies each shapefile's category from its top-level
+    folder name (shp_path.relative_to(base_dir).parts[0]), so a flattened
+    download would have made every shapefile invisible to it."""
+    rel = PurePosixPath(key).relative_to(PREFIX)
+    return BASE_DIR / Path(*rel.parts)
+
+
 def download(s3, obj: dict, force: bool) -> str:
     """Returns 'skipped', 'downloaded', or 'failed'."""
     key = obj["Key"]
-    name = Path(key).name
-    target = DEST / name
+    target = local_target(key)
 
     # Gzipped uploads land decompressed, so check for the final name.
-    final = DEST / name[:-3] if name.endswith(".gz") else target
+    final = target.with_suffix("") if target.suffix == ".gz" else target
+    rel_display = final.relative_to(BASE_DIR)
 
     if final.exists() and not force:
-        print(f"  skip      {final.name}")
+        print(f"  skip      {rel_display}")
         return "skipped"
 
-    print(f"  download  {name}  ({human(obj['Size'])})")
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    print(f"  download  {rel_display}  ({human(obj['Size'])})")
     try:
         s3.download_file(BUCKET, key, str(target))
     except ClientError as e:
-        print(f"  FAILED    {name}: {e}")
+        print(f"  FAILED    {rel_display}: {e}")
         return "failed"
 
-    if name.endswith(".gz"):
+    if target.suffix == ".gz":
         with gzip.open(target, "rb") as fin, open(final, "wb") as fout:
             shutil.copyfileobj(fin, fout)
         target.unlink()
-        print(f"            -> {final.name}  ({human(final.stat().st_size)})")
+        print(f"            -> {rel_display}  ({human(final.stat().st_size)})")
 
     return "downloaded"
 
@@ -136,7 +168,7 @@ def main() -> int:
         return 1
     except ClientError as e:
         print(f"Could not reach the bucket: {e}")
-        print(f"Is R2_BUCKET correct? Currently: {BUCKET}")
+        print(f"Is R2_BUCKET_NAME correct? Currently: {BUCKET}")
         return 1
 
     if not objects:
@@ -149,10 +181,8 @@ def main() -> int:
 
     if args.list:
         for o in sorted(objects, key=lambda x: x["Key"]):
-            print(f"  {human(o['Size']):>10}  {o['Key']}")
+            print(f"  {human(o['Size']):>10}  {o['Key']}  ->  {local_target(o['Key']).relative_to(BASE_DIR)}")
         return 0
-
-    DEST.mkdir(parents=True, exist_ok=True)
 
     counts = {"downloaded": 0, "skipped": 0, "failed": 0}
     for obj in sorted(objects, key=lambda x: x["Key"]):
@@ -168,8 +198,9 @@ def main() -> int:
         print("Some files failed. Re-run to retry just those.")
         return 1
 
-    print(f"\nFiles are in {DEST}/ (gitignored). Raw data is never edited in place -")
-    print("scripts read from here and write to cleaned_data/.")
+    print(f"\nFiles are placed under {BASE_DIR}/, mirroring each key's path under '{PREFIX}'")
+    print("(raw/csv/... -> csv/..., raw/Water_Canals/... -> Water_Canals/..., etc).")
+    print("Raw data is never edited in place - scripts read from here and write to cleaned_data/.")
     return 0
 
 
