@@ -67,3 +67,5 @@ export interface NearbyCoolSpotsResponse {
   top_overall: CoolSpot[]
   by_category: Record<string, CoolSpot[]>
 }
+
+export type SpotFilter = 'All' | 'Indoor' | 'Parks' | 'Water'
