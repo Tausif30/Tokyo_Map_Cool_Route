@@ -63,8 +63,13 @@ import osmnx as ox
 
 app = FastAPI(title="Tokyo Heat Stroke Prevention API", version="0.1")
 
+DEPLOYED_ROUTE_GRAPH_PATH = Path(__file__).resolve().parent / "outputs" / "scored_walking.graphml"
+LOCAL_ROUTE_GRAPH_PATH = ROUTE_CACHE_DIR / "scored_walking.graphml"
 ROUTE_GRAPH_PATH = Path(
-    os.getenv("COOL_ROUTE_GRAPHML", ROUTE_CACHE_DIR / "scored_walking.graphml")
+    os.getenv(
+        "COOL_ROUTE_GRAPHML",
+        DEPLOYED_ROUTE_GRAPH_PATH if DEPLOYED_ROUTE_GRAPH_PATH.exists() else LOCAL_ROUTE_GRAPH_PATH,
+    )
 )
 MAX_ROUTE_DISTANCE_M = 10_000
 MAX_SNAP_DISTANCE_M = 300
