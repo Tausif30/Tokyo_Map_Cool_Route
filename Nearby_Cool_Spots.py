@@ -10,9 +10,9 @@ Given a user's (lat, lon), finds and ranks nearby places to cool off:
   - Convenience Stores  (guaranteed air conditioning + water + a toilet —
     this mirrors Japan's real "みんなのクールシェア" / 涼み処 practice of
     officially pointing people at konbini as heat refuges)
-Convenience_Stores.geojson is already sitting in outputs/ per your directory
-tree (produced by the OSM_Konbini_Offline.py step your wrangler.py docstring
-references) — this script just reads it, it doesn't rebuild it.
+Convenience_Stores.geojson is generated from OpenStreetMap by running
+scripts/fetch_convenience_stores.py. This script only reads that cached layer;
+it never calls an external service while handling an API request.
 
 RANKING: distance-weighted by a simple, adjustable "shelter value" score per
 category (Park=3, Convenience Store=2, Drinking Station=1). This is a
@@ -34,9 +34,10 @@ USAGE (CLI demo):
     (prints a ranked table for a hardcoded Shinjuku-area point, and writes
     outputs/Nearby_Cool_Spots_Demo.geojson for map preview.)
 
-RUN ORDER: standalone, needs Map_Data.py's outputs (Parks_Green_Spaces,
+RUN ORDER: needs Map_Data.py's outputs (Parks_Green_Spaces,
 Protected_Green_Spaces, Drinking_Station) already through Pipeline B
-(Map_Data_Fix_Columns.py + Map_Value_Fix.py), plus Convenience_Stores.geojson.
+(Map_Data_Fix_Columns.py + Map_Value_Fix.py). Also run
+scripts/fetch_convenience_stores.py once to create Convenience_Stores.geojson.
 ============================================================================
 """
 

@@ -67,11 +67,34 @@ cp .env.example .env            # 値を記入。.env は絶対にコミット�
 python scripts/fetch_raw.py --list      # バケットの中身を確認
 python scripts/fetch_raw.py
 
-# フロントエンド / Frontend
+# OpenStreetMap convenience-store layer (cached after the first request)
+python scripts/fetch_convenience_stores.py
+
+# Walking routes: download a demo-area graph, then score it once offline
+python Cool_Route.py \
+  --start 35.6909 139.7003 \
+  --end 35.6852 139.7100 \
+  --wbgt 28
+python scripts/prepare_route_graph.py
+
+# API (keep this terminal running)
+uvicorn api:app --reload --host 0.0.0.0 --port 8000
+
+# Frontend (run in a second terminal)
 cd web
 npm install
 npm run dev
 ```
+
+The prepared graph defaults to `.cache/cool_route/scored_walking.graphml`.
+Set `COOL_ROUTE_GRAPHML=/path/to/scored.graphml` before starting the API to
+use a different pre-scored area. Route requests outside the prepared graph
+return a clear error instead of silently snapping to a distant street.
+
+The app compares three walking routes after a user chooses Point A and a cool
+destination: fastest, lowest estimated heat exposure, and a recommended route
+with no more than a 15% distance detour. Cooling weights are demo heuristics,
+not measured street temperatures.
 
 ### パイプライン / Pipeline
 

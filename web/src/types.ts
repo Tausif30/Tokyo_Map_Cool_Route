@@ -15,13 +15,31 @@ export interface Stop {
   restricted?: boolean
 }
 
+export type RouteId = 'shortest' | 'coolest' | 'balanced'
+
 export interface Route {
-  id: 'fastest' | 'coolest'
+  id: RouteId
   label: string
-  distanceM: number
-  minutes: number
-  exposedFraction: number
-  coords: [number, number][]
+  description: string
+  distance_m: number
+  walking_minutes: number
+  detour_pct: number
+  heat_exposure_index: number
+  cooling_score: number
+  coords: [number, number][][]
+}
+
+export interface WalkingRoutesResponse {
+  query: {
+    start: Coordinates
+    end: Coordinates
+    direct_distance_m: number
+    max_detour_pct: number
+  }
+  wbgt_c: number
+  wbgt_source: 'current_status' | 'request' | 'fallback'
+  recommended_route_id: RouteId
+  routes: Route[]
 }
 
 export interface WbgtReading {

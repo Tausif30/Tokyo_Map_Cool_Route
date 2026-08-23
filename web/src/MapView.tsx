@@ -1,18 +1,24 @@
 import { useEffect, useRef } from 'react'
 import * as L from 'leaflet'
-import type { Coordinates, CoolSpot } from './types'
+import type { Coordinates, CoolSpot, Route, RouteId } from './types'
+import { UI_COPY } from './i18n'
+import type { Language } from './i18n'
 
 interface MapViewProps {
   location: Coordinates | null
   spots: CoolSpot[]
   selectedSpot: CoolSpot | null
+  routes: Route[]
+  activeRouteId: RouteId | null
+  language: Language
   onSelectSpot: (spot: CoolSpot) => void
+  onSelectRoute: (routeId: RouteId) => void
 }
 
 const TOKYO_CENTER: L.LatLngExpression = [35.6812, 139.7671]
 
 function markerIcon(kind: CoolSpot['category'], selected: boolean): L.DivIcon {
-  const symbol = kind === 'Park' ? 'P' : kind === 'Drinking Station' ? 'W' : 'AC'
+  const symbol = kind === 'Park' ? 'P' : kind === 'Drinking Station' ? 'W' : 'K'
   const className = kind === 'Park' ? 'park' : kind === 'Drinking Station' ? 'water' : 'indoor'
 
   return L.divIcon({
@@ -33,7 +39,23 @@ function userIcon(): L.DivIcon {
   })
 }
 
-export default function MapView({ location, spots, selectedSpot, onSelectSpot }: MapViewProps) {
+const ROUTE_COLORS: Record<RouteId, string> = {
+  shortest: '#d1495b',
+  coolest: '#2e7d32',
+  balanced: '#1976d2',
+}
+
+export default function MapView({
+  location,
+  spots,
+  selectedSpot,
+  routes,
+  activeRouteId,
+  language,
+  onSelectSpot,
+  onSelectRoute,
+}: MapViewProps) {
+  const copy = UI_COPY[language]
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<L.Map | null>(null)
   const featureLayerRef = useRef<L.LayerGroup | null>(null)
@@ -54,10 +76,13 @@ export default function MapView({ location, spots, selectedSpot, onSelectSpot }:
     L.control.zoom({ position: 'topright' }).addTo(map)
 
     const layer = L.layerGroup().addTo(map)
+    const resizeObserver = new ResizeObserver(() => map.invalidateSize({ pan: false }))
+    resizeObserver.observe(containerRef.current)
     mapRef.current = map
     featureLayerRef.current = layer
 
     return () => {
+      resizeObserver.disconnect()
       map.remove()
       mapRef.current = null
       featureLayerRef.current = null
@@ -72,10 +97,31 @@ export default function MapView({ location, spots, selectedSpot, onSelectSpot }:
     layer.clearLayers()
     const bounds: L.LatLngExpression[] = []
 
+    routes.forEach((route) => {
+      const active = route.id === activeRouteId
+      const segments = route.coords.map((segment) =>
+        segment.map(([lat, lon]) => [lat, lon] as L.LatLngTuple)
+      )
+      const polyline = L.polyline(segments, {
+        color: ROUTE_COLORS[route.id],
+        weight: active ? 7 : 3,
+        opacity: active ? 0.9 : 0.35,
+        dashArray: active ? undefined : '7 8',
+        lineCap: 'round',
+        lineJoin: 'round',
+      })
+        .bindTooltip(`${copy.routes.labels[route.id]}: ${route.distance_m} m`, { sticky: true })
+        .on('click', () => onSelectRoute(route.id))
+        .addTo(layer)
+
+      if (active) polyline.bringToFront()
+      route.coords.flat().forEach(([lat, lon]) => bounds.push([lat, lon]))
+    })
+
     if (location) {
       const point: L.LatLngExpression = [location.lat, location.lon]
       L.marker(point, { icon: userIcon(), zIndexOffset: 1000 })
-        .bindTooltip('Your location', { direction: 'top' })
+        .bindTooltip(copy.map.yourLocation, { direction: 'top' })
         .addTo(layer)
       bounds.push(point)
     }
@@ -95,7 +141,7 @@ export default function MapView({ location, spots, selectedSpot, onSelectSpot }:
       bounds.push(point)
     })
 
-    if (location && selectedSpot) {
+    if (location && selectedSpot && routes.length === 0) {
       L.polyline(
         [
           [location.lat, location.lon],
@@ -110,21 +156,26 @@ export default function MapView({ location, spots, selectedSpot, onSelectSpot }:
     } else if (bounds.length === 1) {
       map.flyTo(bounds[0], 15)
     }
-  }, [location, onSelectSpot, selectedSpot, spots])
+  }, [activeRouteId, copy, location, onSelectRoute, onSelectSpot, routes, selectedSpot, spots])
 
   return (
     <div className="map-wrap">
-      <div ref={containerRef} className="map-canvas" aria-label="Map of nearby cooling places" />
-      <div className="map-legend" aria-label="Map legend">
+      <div ref={containerRef} className="map-canvas" aria-label={copy.map.aria} />
+      <div className="map-legend" aria-label={copy.map.legendAria}>
         <span>
-          <i className="legend-dot park" /> Park
+          <i className="legend-dot park" /> {copy.map.park}
         </span>
         <span>
-          <i className="legend-dot water" /> Drinking water
+          <i className="legend-dot water" /> {copy.map.water}
         </span>
         <span>
-          <i className="legend-dot indoor" /> Indoor refuge
+          <i className="legend-dot indoor" /> {copy.map.indoor}
         </span>
+        {routes.length > 0 && (
+          <span>
+            <i className="legend-route" /> {copy.map.route}
+          </span>
+        )}
       </div>
     </div>
   )
