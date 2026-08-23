@@ -7,5 +7,11 @@ set -e
 echo "=== Fetching outputs/ from R2 ==="
 python fetch_raw.py --prefix outputs/
 
+echo "=== Initial WBGT poll ==="
+python WBGT_Monitor.py
+
+echo "=== Starting WBGT background poller (every 30 min) ==="
+(while true; do sleep 1800; python WBGT_Monitor.py; done) &
+
 echo "=== Starting API ==="
 exec uvicorn api:app --host 0.0.0.0 --port "${PORT:-8000}"
