@@ -40,16 +40,24 @@ Python layer decides on its own.
 ============================================================================
 """
 
+import asyncio
 import json
 import os
+from contextlib import asynccontextmanager, suppress
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 
-from WBGT_Monitor import STATUS_PATH as WBGT_STATUS_PATH, classify_for_profile
+from WBGT_Monitor import (
+    STATUS_PATH as WBGT_STATUS_PATH,
+    append_log as append_wbgt_log,
+    classify_for_profile,
+    fetch_latest_reading,
+    write_status as write_wbgt_status,
+)
 from Nearby_Cool_Spots import nearby_cool_spots
 from Cool_Route import (
     CACHE_DIR as ROUTE_CACHE_DIR,
@@ -61,7 +69,46 @@ from Cool_Route import (
 
 import osmnx as ox
 
-app = FastAPI(title="Tokyo Heat Stroke Prevention API", version="0.1")
+WBGT_POLL_SECONDS = max(60, int(os.getenv("WBGT_POLL_SECONDS", "900")))
+
+
+def _refresh_wbgt_status():
+    status = write_wbgt_status(fetch_latest_reading())
+    append_wbgt_log(status)
+    return status
+
+
+async def _wbgt_poll_loop():
+    while True:
+        try:
+            status = await asyncio.to_thread(_refresh_wbgt_status)
+            print(
+                "WBGT refreshed: "
+                f"{status['observed_at']} JST, {status['wbgt_c']} C"
+            )
+        except Exception as exc:
+            # Keep the API and future refresh attempts alive when the Ministry
+            # endpoint has a temporary outage.
+            print(f"WARNING: WBGT refresh failed: {exc}")
+        await asyncio.sleep(WBGT_POLL_SECONDS)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    wbgt_task = asyncio.create_task(_wbgt_poll_loop())
+    try:
+        yield
+    finally:
+        wbgt_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await wbgt_task
+
+
+app = FastAPI(
+    title="Tokyo Heat Stroke Prevention API",
+    version="0.1",
+    lifespan=lifespan,
+)
 
 DEPLOYED_ROUTE_GRAPH_PATH = Path(__file__).resolve().parent / "outputs" / "scored_walking.graphml"
 LOCAL_ROUTE_GRAPH_PATH = ROUTE_CACHE_DIR / "scored_walking.graphml"
@@ -132,20 +179,23 @@ def _load_route_graph(path: str):
 
 
 @app.get("/wbgt/status")
-def wbgt_status():
+def wbgt_status(response: Response):
     """Raw, un-personalized reading — the same thing WBGT_Monitor.py writes
     to outputs/WBGT_Current_Status.json each poll."""
+    response.headers["Cache-Control"] = "no-store, max-age=0"
     return _load_wbgt_status()
 
 
 @app.get("/wbgt/personalized")
 def wbgt_personalized(
+    response: Response,
     age: Optional[int] = Query(None, ge=0, le=120, description="user's age in years"),
     is_pregnant: bool = Query(False),
     has_chronic_condition: bool = Query(False),
 ):
     """Same underlying WBGT reading, but the alert threshold is adjusted
     for the given profile — see WBGT_Monitor.classify_for_profile()."""
+    response.headers["Cache-Control"] = "no-store, max-age=0"
     status = _load_wbgt_status()
     profile = _profile_from_query(age, is_pregnant, has_chronic_condition)
     return classify_for_profile(status["wbgt_c"], profile)

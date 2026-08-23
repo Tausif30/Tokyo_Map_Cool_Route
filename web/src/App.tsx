@@ -28,7 +28,7 @@ function errorMessage(error: unknown, fallback: string): string {
 }
 
 async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(url, { signal })
+  const response = await fetch(url, { signal, cache: 'no-store' })
   const body: unknown = await response.json()
 
   if (!response.ok) {
@@ -285,7 +285,17 @@ export default function App() {
   useEffect(() => {
     const controller = new AbortController()
     void fetchWbgt(controller.signal)
-    return () => controller.abort()
+    const interval = window.setInterval(() => void fetchWbgt(), 15 * 60 * 1000)
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') void fetchWbgt()
+    }
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+
+    return () => {
+      controller.abort()
+      window.clearInterval(interval)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+    }
   }, [fetchWbgt])
 
   const loadNearby = useCallback(async (coordinates: Coordinates) => {

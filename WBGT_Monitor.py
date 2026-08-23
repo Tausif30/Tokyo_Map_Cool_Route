@@ -62,6 +62,7 @@ import csv
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import requests
 
@@ -77,6 +78,7 @@ LOG_PATH = CLEAN_DIR / "WBGT_Live_Log.csv"
 API_URL = "https://www.wbgt.env.go.jp/api/v1/getSurveyData"
 TOKYO_STATION = 44132
 LOOKBACK_HOURS = 6   # widen this if the station has been dropping updates
+TOKYO_TIMEZONE = ZoneInfo("Asia/Tokyo")
 
 ALERT_LEVELS = {"Severe Warning", "Danger"}
 
@@ -97,8 +99,15 @@ def risk_level(wbgt_c):
         return "Almost Safe"
 
 
-def fetch_latest_reading():
-    now = datetime.now()
+def fetch_latest_reading(now=None):
+    # The Ministry API expects its date range in Japan Standard Time. Railway
+    # runs in UTC by default, so datetime.now() used to make production query
+    # a window nine hours behind Tokyo and publish an old reading.
+    now = now or datetime.now(TOKYO_TIMEZONE)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=TOKYO_TIMEZONE)
+    else:
+        now = now.astimezone(TOKYO_TIMEZONE)
     date_to = now.strftime("%Y%m%d%H%M%S")
     date_from = (now - timedelta(hours=LOOKBACK_HOURS)).strftime("%Y%m%d%H%M%S")
 
@@ -142,7 +151,7 @@ def write_status(reading):
         **reading,
         "risk_level": level,
         "alert": level in ALERT_LEVELS,
-        "checked_at": datetime.now().isoformat(timespec="seconds"),
+        "checked_at": datetime.now(TOKYO_TIMEZONE).isoformat(timespec="seconds"),
     }
     with open(STATUS_PATH, "w", encoding="utf-8") as f:
         json.dump(status, f, ensure_ascii=False, indent=2)
