@@ -59,8 +59,8 @@ checking each source directly — do not guess at licence terms.
 |---|---|
 | 出典 / Source | OpenStreetMap（Overpass API 経由） |
 | URL | https://www.openstreetmap.org/ |
-| 取得日 / Retrieved | TODO |
-| クエリ / Query | `nwr["shop"="convenience"]` in area JP-13 — see `fetch_konbini.py` |
+| 取得日 / Retrieved | Generated file records the UTC retrieval time |
+| クエリ / Query | `nwr["shop"="convenience"]` in area JP-13 — see `scripts/fetch_convenience_stores.py` |
 | ライセンス / Licence | ODbL — © OpenStreetMap contributors. 表示義務あり。 |
 | 備考 / Notes | 補助データ。有志による整備のため網羅性は保証されない。 |
 
