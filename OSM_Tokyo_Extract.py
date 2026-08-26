@@ -115,6 +115,10 @@ LAYER_COLORS = {
     "Fast Food": "#ff7043",
     "Offices": "#607d8b",
     "Departmental Stores": "#795548",
+    "Libraries": "#00897b",
+    "Pharmacies": "#43a047",
+    "Drug Stores": "#66bb6a",
+    "City Offices": "#546e7a",
 }
 
 
@@ -325,7 +329,7 @@ def extract_fast_food(osm):
 
 def extract_departmental_stores(osm):
     print("\n=== Extracting departmental stores ===")
-    departmental_stores = osm.get_pois(custom_filter={"shop": ["depart*"]})
+    departmental_stores = osm.get_pois(custom_filter={"shop": ["department_store"]})
     return write_geojson(departmental_stores, "Departmental_Stores.geojson", "Departmental Stores")
 
 def extract_offices(osm):
@@ -333,7 +337,44 @@ def extract_offices(osm):
     offices = osm.get_pois(custom_filter={"office": True})
     return write_geojson(offices, "Offices.geojson", "Offices")
 
+def extract_libraries(osm):
+    print("\n=== Extracting libraries ===")
+    libraries = osm.get_pois(custom_filter={"amenity": ["library"]})
+    return write_geojson(libraries, "Libraries.geojson", "Libraries")
 
+
+def extract_pharmacies(osm):
+    print("\n=== Extracting pharmacies ===")
+    # amenity=pharmacy = dispenses prescription medication. Distinct from
+    # Drug_Stores below (shop=chemist) — OSM keeps these as two separate
+    # tags; a shop can carry both if it genuinely does both.
+    pharmacies = osm.get_pois(custom_filter={"amenity": ["pharmacy"]})
+    return write_geojson(pharmacies, "Pharmacies.geojson", "Pharmacies")
+
+
+def extract_drug_stores(osm):
+    print("\n=== Extracting drug stores ===")
+    # shop=chemist = OTC medicine, cosmetics, toiletries, household items —
+    # no dispensing pharmacy counter required. This is the correct OSM tag
+    # for what Japan calls a ドラッグストア (Matsumoto Kiyoshi, Sundrug,
+    # Welcia, Cocokara Fine, Sugi Drug, ...), distinct from a pharmacy.
+    drug_stores = osm.get_pois(custom_filter={"shop": ["chemist"]})
+    return write_geojson(drug_stores, "Drug_Stores.geojson", "Drug Stores")
+
+
+def extract_city_offices(osm):
+    print("\n=== Extracting city/ward offices ===")
+    # amenity=townhall = the actual city/ward hall building (区役所/市役所).
+    # office=government = other government branches (tax office, etc).
+    # Deliberately separate from extract_offices() below, which pulls
+    # office=True — every business/professional office citywide (law
+    # firms, accountants, everything). That's a different, much broader
+    # category and not what "City Office" means here.
+    city_offices = osm.get_pois(custom_filter={
+        "amenity": ["townhall"],
+        "office": ["government"],
+    })
+    return write_geojson(city_offices, "City_Offices.geojson", "City Offices")
 # ---------------------------------------------------------------------
 # 3. Buildings — opt-in only. See module docstring for why.
 # ---------------------------------------------------------------------
@@ -392,6 +433,10 @@ if __name__ == "__main__":
     written_bytes += extract_fast_food(osm) or 0
     written_bytes += extract_offices(osm) or 0
     written_bytes += extract_departmental_stores(osm) or 0
+    written_bytes += extract_libraries(osm) or 0
+    written_bytes += extract_pharmacies(osm) or 0
+    written_bytes += extract_drug_stores(osm) or 0
+    written_bytes += extract_city_offices(osm) or 0
     if args.include_buildings:
         written_bytes += extract_buildings(osm) or 0
     else:
@@ -402,3 +447,4 @@ if __name__ == "__main__":
     print(f"\n=== Done. GeoJSON layers total: {human(written_bytes)} "
           f"(routing graph reported separately above) ===")
     print(f"All files written to {OUT_DIR}")
+    
