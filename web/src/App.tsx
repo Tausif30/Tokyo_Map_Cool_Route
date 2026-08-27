@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import MapView from './MapView'
+import SearchBox from './SearchBox'
 import type {
   ApiRiskLevel,
   Coordinates,
@@ -171,10 +172,11 @@ interface LocationPanelProps {
   locating: boolean
   onLocate: () => void
   onDemo: () => void
+  onSelectSpot: (spot: CoolSpot) => void
   copy: AppCopy
 }
 
-function LocationPanel({ location, selectedSpot, locating, onLocate, onDemo, copy }: LocationPanelProps) {
+function LocationPanel({ location, selectedSpot, locating, onLocate, onDemo, onSelectSpot, copy }: LocationPanelProps) {
   return (
     <section className="location-card">
       <div className="section-heading">
@@ -195,9 +197,22 @@ function LocationPanel({ location, selectedSpot, locating, onLocate, onDemo, cop
       <div className="location-connector" />
       <div className="location-field">
         <span className="field-pin field-pin-b">B</span>
-        <div>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <small>{copy.location.destination}</small>
-          <strong>{selectedSpot ? displaySpotName(selectedSpot, copy) : copy.location.selectPlace}</strong>
+          {/* Replace the static text with the SearchBox */}
+          <SearchBox
+            near={location ? { lat: location.lat, lon: location.lon } : undefined}
+            onSelect={(place) => {
+              // Map the Place result to the App's CoolSpot state shape
+              onSelectSpot({
+                ...place,
+                score: 0,
+                distance_m: place.distance_m ?? 0
+              } as CoolSpot)
+            }}
+            apiBaseUrl={API}
+            placeholder={selectedSpot ? displaySpotName(selectedSpot, copy) : copy.location.selectPlace}
+          />
         </div>
       </div>
       <button className="primary-button" type="button" onClick={onLocate} disabled={locating}>
@@ -446,6 +461,7 @@ export default function App() {
             locating={spotsLoading}
             onLocate={findLocation}
             onDemo={() => void loadNearby(SHINJUKU_DEMO)}
+            onSelectSpot={handleSelectSpot}
             copy={copy}
           />
           <p className="method-note">{copy.methodNote}</p>

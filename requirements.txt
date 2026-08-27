@@ -9,6 +9,8 @@ matplotlib
 networkx
 osmnx
 scipy
+pyrosm
+rapidfuzz
 
 # HTTP API
 fastapi

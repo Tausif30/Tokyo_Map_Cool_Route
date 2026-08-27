@@ -50,6 +50,7 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
+from Search_Places import build_index, search_places
 
 from WBGT_Monitor import (
     STATUS_PATH as WBGT_STATUS_PATH,
@@ -109,7 +110,7 @@ app = FastAPI(
     version="0.1",
     lifespan=lifespan,
 )
-
+PLACE_INDEX = build_index()
 DEPLOYED_ROUTE_GRAPH_PATH = Path(__file__).resolve().parent / "outputs" / "scored_walking.graphml"
 LOCAL_ROUTE_GRAPH_PATH = ROUTE_CACHE_DIR / "scored_walking.graphml"
 ROUTE_GRAPH_PATH = Path(
@@ -127,7 +128,6 @@ MAX_SNAP_DISTANCE_M = 300
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
 )
-
 
 def _load_wbgt_status():
     if not WBGT_STATUS_PATH.exists():
@@ -245,7 +245,6 @@ def walking_routes_endpoint(
             status_code=400,
             detail=f"Routes are currently limited to {MAX_ROUTE_DISTANCE_M // 1000} km",
         )
-
     if wbgt_c is None:
         try:
             wbgt_c = float(_load_wbgt_status()["wbgt_c"])
@@ -304,3 +303,32 @@ def walking_routes_endpoint(
         raise HTTPException(status_code=422, detail=str(error)) from error
     except Exception as error:
         raise HTTPException(status_code=500, detail=f"Route calculation failed: {error}") from error
+
+        
+@app.get("/search-places")
+def search_places_endpoint(
+    q: str = Query(..., min_length=1, description="text the user typed"),
+    categories: Optional[str] = Query(
+        None,
+        description="comma-separated category names to restrict to, e.g. "
+                     "'Hospital,Pharmacy'. Omit to search every category.",
+    ),
+    near_lat: Optional[float] = Query(
+        None, ge=-90, le=90, description="usually Point A / current location"
+    ),
+    near_lon: Optional[float] = Query(None, ge=-180, le=180),
+    limit: int = Query(10, gt=0, le=50),
+):
+    """Powers the frontend's Point B search box AND, if you want it, the
+    right-panel 'Nearby cool spots' list — both are just different UIs
+    calling this same endpoint (or in the cool-spots list's case,
+    /nearby-cool-spots above; either can drive the same onSelect handler
+    on the frontend). Returns [{name, category, lat, lon[, distance_m]}]."""
+    category_list = [c.strip() for c in categories.split(",")] if categories else None
+    near = (near_lat, near_lon) if near_lat is not None and near_lon is not None else None
+    try:
+        return search_places(PLACE_INDEX, q, categories=category_list, limit=limit, near=near)
+    except Exception:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="search failed — see server terminal for the traceback")

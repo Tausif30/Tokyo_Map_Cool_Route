@@ -15,6 +15,15 @@ export interface Stop {
   restricted?: boolean
 }
 
+export interface Place {
+  name: string;
+  category: string;
+  lat: number;
+  lon: number;
+  distance_m?: number;
+}
+
+
 export type RouteId = 'shortest' | 'coolest' | 'balanced'
 
 export interface Route {
