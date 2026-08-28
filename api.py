@@ -256,7 +256,7 @@ def walking_routes_endpoint(
         wbgt_source = "request"
 
     try:
-        base_graph = _load_route_graph(str(ROUTE_GRAPH_PATH.resolve()))
+        graph = _load_route_graph(str(ROUTE_GRAPH_PATH.resolve()))
         (origin, destination), snap_distances = snap_graph_nodes(graph, start, end)
         if max(snap_distances) > MAX_SNAP_DISTANCE_M:
             raise HTTPException(
