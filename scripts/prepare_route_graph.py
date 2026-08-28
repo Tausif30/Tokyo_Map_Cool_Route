@@ -1,19 +1,11 @@
-"""Pre-score a cached OSMnx walking graph for fast API routing.
-
-Spatial joins against the greenery, water, and drinking-station layers belong
-in this offline preparation step, not inside an HTTP request. Run this again
-after replacing those source layers.
-
-Usage:
-    python scripts/prepare_route_graph.py
-    python scripts/prepare_route_graph.py --input path/to/walk.graphml
-"""
+"""Pre-score a cached OSMnx walking graph for fast API routing."""
 
 from __future__ import annotations
 
 import argparse
 import os
 import sys
+import pickle
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -26,9 +18,8 @@ from pyproj import CRS
 
 from Cool_Route import CACHE_DIR, score_graph_edges
 
-
-DEFAULT_OUTPUT = CACHE_DIR / "scored_walking.graphml"
-
+# Changed output extension to .pkl
+DEFAULT_OUTPUT = CACHE_DIR / "scored_walking.pkl"
 
 def discover_input() -> Path:
     candidates = sorted(
@@ -44,12 +35,10 @@ def discover_input() -> Path:
         raise RuntimeError(f"Multiple walking graphs found ({names}); pass --input explicitly.")
     return candidates[0]
 
-
 def graph_bounds_wgs84(graph) -> tuple[float, float, float, float]:
     nodes = ox.convert.graph_to_gdfs(graph, nodes=True, edges=False)
     west, south, east, north = nodes.to_crs(4326).total_bounds
     return float(west), float(south), float(east), float(north)
-
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -58,7 +47,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input", type=Path, help="raw walking GraphML")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     return parser.parse_args()
-
 
 def main() -> None:
     args = parse_args()
@@ -76,9 +64,12 @@ def main() -> None:
     graph = score_graph_edges(graph, bounds)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    ox.io.save_graphml(graph, args.output)
+    
+    # Save as high-performance binary pickle instead of XML graphml
+    with open(args.output, "wb") as f:
+        pickle.dump(graph, f, protocol=pickle.HIGHEST_PROTOCOL)
+        
     print(f"Wrote pre-scored walking graph: {args.output}")
-
 
 if __name__ == "__main__":
     main()

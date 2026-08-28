@@ -6,7 +6,7 @@ set -e
 
 echo "=== Fetching outputs/ from R2 ==="
 python fetch_raw.py --prefix outputs/
-python fetch_raw.py --only scored_walking.graphml
+python fetch_raw.py --only scored_walking.pkl
 
 echo "=== Starting API (WBGT refreshes now and every 15 min) ==="
 exec uvicorn api:app --host 0.0.0.0 --port "${PORT:-8000}"

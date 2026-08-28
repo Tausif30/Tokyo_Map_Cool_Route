@@ -398,6 +398,29 @@ def summarize_route(frame: gpd.GeoDataFrame) -> dict[str, float]:
     }
 
 
+def route_frame(
+    graph: nx.MultiDiGraph, route: list[int], weight: str
+) -> gpd.GeoDataFrame:
+    return ox.routing.route_to_gdf(graph, route, weight=weight)
+
+def summarize_route(frame: gpd.GeoDataFrame) -> dict[str, float]:
+    length = float(frame["length_m"].sum())
+
+    def weighted_average(column: str) -> float:
+        if length <= 0:
+            return 0.0
+        return float((frame[column] * frame["length_m"]).sum() / length)
+
+    return {
+        "length_m": length,
+        "walking_minutes": length / 80.0,
+        "heat_exposure_index": weighted_average("heat_exposure"),
+        "cooling_score": weighted_average("cooling_score"),
+        "tree_score": weighted_average("tree_score"),
+        "park_score": weighted_average("park_score"),
+        "station_score": weighted_average("station_score"),
+    }
+
 def calculate_routes(
     graph: nx.MultiDiGraph,
     origin: int,
@@ -405,7 +428,7 @@ def calculate_routes(
     wbgt_c: float,
     max_detour_pct: float,
 ) -> dict[str, dict]:
-    """Calculate the three route alternatives and their summaries."""
+    """Calculate the three route alternatives and their summaries dynamically."""
     try:
         shortest_nodes = nx.shortest_path(graph, origin, destination, weight="length_m")
     except nx.NetworkXNoPath as exc:
@@ -415,18 +438,16 @@ def calculate_routes(
     shortest_summary = summarize_route(shortest_frame)
     shortest_distance = shortest_summary["length_m"]
 
-    # Evaluate coolest route dynamically. For MultiDiGraph, edge_dict contains
-    # all parallel edges between u and v. We calculate the cost for each and take the min.
+    # Dynamic Weight: Prevents mutating the entire graph. Handles parallel edges.
     def coolest_weight(u, v, edge_dict):
         return min(
-            attr["length_m"] * (0.10 + attr["heat_exposure"])
+            attr["length_m"] * (0.10 + attr.get("heat_exposure", 0.0))
             for attr in edge_dict.values()
         )
 
     coolest_nodes = nx.shortest_path(graph, origin, destination, weight=coolest_weight)
     coolest_frame = route_frame(graph, coolest_nodes, "length_m")
 
-    # Generate balanced routes dynamically
     risk = wbgt_multiplier(wbgt_c)
     candidates: list[tuple[gpd.GeoDataFrame, dict[str, float]]] = [
         (shortest_frame, shortest_summary)
@@ -436,7 +457,7 @@ def calculate_routes(
     for alpha in (0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0):
         def balanced_weight(u, v, edge_dict, a=alpha):
             return min(
-                attr["length_m"] * (1.0 + a * risk * attr["heat_exposure"])
+                attr["length_m"] * (1.0 + a * risk * attr.get("heat_exposure", 0.0))
                 for attr in edge_dict.values()
             )
 
@@ -446,18 +467,15 @@ def calculate_routes(
             continue
         seen.add(key)
         
-        # We can resolve parallel edges using standard length_m once the nodes are chosen
         frame = route_frame(graph, nodes, "length_m")
         candidates.append((frame, summarize_route(frame)))
 
-    limit = shortest_distance * (1 + max_detour_pct / 100)
-    eligible = [candidate for candidate in candidates if candidate[1]["length_m"] <= limit]
+    limit = shortest_distance * (1 + max_detour_pct / 100.0)
+    eligible = [c for c in candidates if c[1]["length_m"] <= limit]
+    
     balanced_frame, _ = min(
         eligible,
-        key=lambda candidate: (
-            candidate[1]["heat_exposure_index"],
-            candidate[1]["length_m"],
-        ),
+        key=lambda c: (c[1]["heat_exposure_index"], c[1]["length_m"]),
     )
 
     result = {
@@ -465,11 +483,13 @@ def calculate_routes(
         "coolest": {"frame": coolest_frame},
         "balanced": {"frame": balanced_frame},
     }
+    
     for route_type, route in result.items():
         route["summary"] = summarize_route(route["frame"])
         route["summary"]["detour_pct"] = (
             route["summary"]["length_m"] / shortest_distance - 1
         ) * 100
+        
     return result
 
 
