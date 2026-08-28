@@ -160,7 +160,7 @@ export const UI_COPY: Record<Language, UiCopy> = {
       detail: 'Use your current location to see parks, drinking water, and nearby konbini.',
     },
     selection: {
-      eyebrow: 'Selected cool spot',
+      eyebrow: 'Selected Destination',
       away: 'm away',
       about: 'about',
       minuteWalk: 'min walk',
@@ -277,7 +277,7 @@ export const UI_COPY: Record<Language, UiCopy> = {
       detail: '現在地を使用して、公園、給水スポット、近くのコンビニを表示します。',
     },
     selection: {
-      eyebrow: '選択中の涼しい場所',
+      eyebrow: '選択された目的地',
       away: 'm先',
       about: '約',
       minuteWalk: '分',
