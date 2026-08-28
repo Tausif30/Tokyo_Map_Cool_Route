@@ -415,9 +415,13 @@ def calculate_routes(
     shortest_summary = summarize_route(shortest_frame)
     shortest_distance = shortest_summary["length_m"]
 
-    # Evaluate coolest route dynamically without mutating the graph
-    def coolest_weight(u, v, edge):
-        return edge["length_m"] * (0.10 + edge["heat_exposure"])
+    # Evaluate coolest route dynamically. For MultiDiGraph, edge_dict contains
+    # all parallel edges between u and v. We calculate the cost for each and take the min.
+    def coolest_weight(u, v, edge_dict):
+        return min(
+            attr["length_m"] * (0.10 + attr["heat_exposure"])
+            for attr in edge_dict.values()
+        )
 
     coolest_nodes = nx.shortest_path(graph, origin, destination, weight=coolest_weight)
     coolest_frame = route_frame(graph, coolest_nodes, "length_m")
@@ -430,8 +434,11 @@ def calculate_routes(
     seen = {tuple(shortest_nodes)}
     
     for alpha in (0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0):
-        def balanced_weight(u, v, edge, a=alpha):
-            return edge["length_m"] * (1.0 + a * risk * edge["heat_exposure"])
+        def balanced_weight(u, v, edge_dict, a=alpha):
+            return min(
+                attr["length_m"] * (1.0 + a * risk * attr["heat_exposure"])
+                for attr in edge_dict.values()
+            )
 
         nodes = nx.shortest_path(graph, origin, destination, weight=balanced_weight)
         key = tuple(nodes)
