@@ -20,6 +20,7 @@ import argparse
 import hashlib
 import math
 import os
+import time
 from pathlib import Path
 from typing import Callable
 
@@ -168,21 +169,58 @@ def read_layer(
 
 
 def proximity_fraction(
-    edge_geometry: gpd.GeoSeries,
+    edges: gpd.GeoDataFrame,
     layer: gpd.GeoDataFrame,
     distance_m: float,
 ) -> pd.Series:
-    """Fraction of each edge within distance_m of any layer feature."""
+    """Cooling-proximity score per edge: 1.0 if an edge touches a feature
+    in `layer`, decaying to 0.0 at distance_m away or farther.
+
+    REWRITTEN FOR CITYWIDE SCALE. The previous version buffered every
+    feature in a layer (e.g. every park polygon in Tokyo), spatial-joined
+    to find edges near ANY buffered feature, then called `.union_all()`
+    on all the matched buffers before measuring exact overlap length.
+    That narrowing step helps in one district, where "features near some
+    edge" is a small slice of the layer. At full-Tokyo scale it barely
+    narrows anything: a dense citywide walking network sits near almost
+    every park in the city, so the "matched" set is nearly the WHOLE
+    layer, and `.union_all()` over thousands of overlapping, detailed
+    park polygons is exactly what was hanging.
+
+    This version never builds a citywide union at all. `sjoin_nearest`
+    uses the same R-tree spatial index, but only asks "what's the single
+    closest feature to this edge, and how far away is it?" instead of
+    "build one shape covering every nearby feature, then measure exact
+    overlap against it." That scales the same way whether the layer has
+    50 features or 50,000 — there's no step whose cost depends on how
+    MANY features are near the network as a whole.
+
+    Trade-off worth knowing about: the old metric was "% of this edge's
+    length that falls inside a buffer polygon." This one is "how close
+    is the edge's nearest approach to a feature," linearly scored to 0
+    at distance_m. Slightly different number, same intent (edges right
+    next to a park score high, edges far from any park score low) — and
+    it's arguably a fairer proxy for edges that just clip the corner of
+    a buffer versus edges that run right alongside one.
+    """
+    zeros = pd.Series(0.0, index=edges.index, dtype=float)
     if layer.empty:
-        return pd.Series(0.0, index=edge_geometry.index, dtype=float)
+        return zeros
 
-    cooling_zone = layer.geometry.buffer(distance_m).union_all()
-    if cooling_zone.is_empty:
-        return pd.Series(0.0, index=edge_geometry.index, dtype=float)
+    nearest = gpd.sjoin_nearest(
+        edges[["geometry"]],
+        layer[["geometry"]],
+        how="inner",
+        max_distance=distance_m,
+        distance_col="_dist_m",
+    )
+    # A handful of edges can tie for "closest feature" with more than one
+    # candidate — keep only the closest match per edge.
+    closest = nearest.groupby(nearest.index)["_dist_m"].min()
+    closest = closest.reindex(edges.index)  # edges with nothing nearby -> NaN
 
-    edge_lengths = edge_geometry.length.clip(lower=1.0)
-    overlap = edge_geometry.intersection(cooling_zone).length
-    return (overlap / edge_lengths).clip(lower=0.0, upper=1.0)
+    score = 1.0 - (closest / distance_m)
+    return score.clip(lower=0.0, upper=1.0).fillna(0.0)
 
 
 def tree_scores(
@@ -190,21 +228,31 @@ def tree_scores(
     trees: gpd.GeoDataFrame,
     buffer_m: float = 12.0,
 ) -> tuple[pd.Series, pd.Series]:
-    """Return normalized shade proxy and raw nearby tree counts per edge."""
+    """Return normalized shade proxy and raw nearby tree counts per edge.
+
+    REWRITTEN FOR CITYWIDE SCALE. The previous version buffered every
+    edge in the graph — hundreds of thousands of them, citywide — into
+    its own 12 m-wide polygon before joining against tree points. That's
+    a lot of geometry construction before the join even starts, and it
+    scales with graph size, not with how many trees exist.
+
+    `sjoin_nearest` with `max_distance` asks the R-tree "which edge is
+    closest to this tree, and is it within buffer_m?" directly, with no
+    per-edge buffer polygons at all. One side effect: a tree now counts
+    toward its single nearest edge rather than every edge within 12 m —
+    slightly different from before, and arguably more correct (a tree
+    between two parallel streets shouldn't shade both equally), but
+    worth knowing it's not byte-identical to the old numbers.
+    """
     if trees.empty:
         zeros = pd.Series(0.0, index=edges.index, dtype=float)
         return zeros, zeros.astype(int)
 
-    edge_buffers = gpd.GeoDataFrame(
-        {"edge_id": edges.index},
-        geometry=edges.geometry.buffer(buffer_m),
-        crs=edges.crs,
-    )
-    joined = gpd.sjoin(
+    joined = gpd.sjoin_nearest(
         trees[["geometry"]],
-        edge_buffers[["edge_id", "geometry"]],
+        edges[["edge_id", "geometry"]],
         how="inner",
-        predicate="within",
+        max_distance=buffer_m,
     )
     counts = joined.groupby("edge_id").size().reindex(edges.index, fill_value=0)
     # Six trees per 100 m is treated as a strong tree-lined segment. This is
@@ -227,14 +275,23 @@ def score_graph_edges(
     edges["length_m"] = pd.to_numeric(edges.get("length"), errors="coerce")
     edges["length_m"] = edges["length_m"].fillna(edges.geometry.length).clip(lower=0.1)
     target_crs = CRS.from_user_input(edges.crs)
+    print(f"  {len(edges):,} edges to score")
 
+    # Each step below prints how long it took. At citywide scale this can
+    # legitimately take a while even after the union-free rewrite below —
+    # these prints exist so a slow step still LOOKS like it's making
+    # progress instead of looking exactly like a freeze.
+    t0 = time.perf_counter()
     trees = read_layer(layer_dir / "Street_Trees.geojson", bounds, target_crs)
     edges["tree_score"], edges["nearby_tree_count"] = tree_scores(edges, trees)
+    print(f"  tree_score: {time.perf_counter() - t0:.1f}s")
 
     weighted_columns: list[tuple[str, float]] = [("tree_score", TREE_WEIGHT)]
     for score_name, (filename, buffer_m, weight) in COOLING_LAYERS.items():
+        t0 = time.perf_counter()
         layer = read_layer(layer_dir / filename, bounds, target_crs)
-        edges[score_name] = proximity_fraction(edges.geometry, layer, buffer_m)
+        edges[score_name] = proximity_fraction(edges, layer, buffer_m)
+        print(f"  {score_name}: {time.perf_counter() - t0:.1f}s")
         weighted_columns.append((score_name, weight))
 
     edges["cooling_score"] = sum(edges[column] * weight for column, weight in weighted_columns)
