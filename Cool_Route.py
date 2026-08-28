@@ -415,37 +415,32 @@ def calculate_routes(
     shortest_summary = summarize_route(shortest_frame)
     shortest_distance = shortest_summary["length_m"]
 
-    # Pure cooling still retains 10% of distance cost. This prevents zero-cost
-    # green loops while allowing a substantial detour for the "coolest" route.
-    set_cost(
-        graph,
-        "coolest_cost",
-        lambda edge: edge["length_m"] * (0.10 + edge["heat_exposure"]),
-    )
-    coolest_nodes = nx.shortest_path(graph, origin, destination, weight="coolest_cost")
-    coolest_frame = route_frame(graph, coolest_nodes, "coolest_cost")
+    # Evaluate coolest route dynamically without mutating the graph
+    def coolest_weight(u, v, edge):
+        return edge["length_m"] * (0.10 + edge["heat_exposure"])
 
-    # Generate routes across a range of comfort preferences. Then enforce the
-    # user's detour constraint and choose the candidate with least exposure.
+    coolest_nodes = nx.shortest_path(graph, origin, destination, weight=coolest_weight)
+    coolest_frame = route_frame(graph, coolest_nodes, "length_m")
+
+    # Generate balanced routes dynamically
     risk = wbgt_multiplier(wbgt_c)
     candidates: list[tuple[gpd.GeoDataFrame, dict[str, float]]] = [
         (shortest_frame, shortest_summary)
     ]
     seen = {tuple(shortest_nodes)}
-    for index, alpha in enumerate((0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0)):
-        cost_name = f"balanced_cost_{index}"
-        set_cost(
-            graph,
-            cost_name,
-            lambda edge, a=alpha: edge["length_m"]
-            * (1.0 + a * risk * edge["heat_exposure"]),
-        )
-        nodes = nx.shortest_path(graph, origin, destination, weight=cost_name)
+    
+    for alpha in (0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0):
+        def balanced_weight(u, v, edge, a=alpha):
+            return edge["length_m"] * (1.0 + a * risk * edge["heat_exposure"])
+
+        nodes = nx.shortest_path(graph, origin, destination, weight=balanced_weight)
         key = tuple(nodes)
         if key in seen:
             continue
         seen.add(key)
-        frame = route_frame(graph, nodes, cost_name)
+        
+        # We can resolve parallel edges using standard length_m once the nodes are chosen
+        frame = route_frame(graph, nodes, "length_m")
         candidates.append((frame, summarize_route(frame)))
 
     limit = shortest_distance * (1 + max_detour_pct / 100)

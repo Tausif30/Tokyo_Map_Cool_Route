@@ -100,7 +100,11 @@ def iter_upload_pairs():
             if path.is_file():
                 rel = path.relative_to(local_root)
                 yield path, f"{key_prefix}/{rel.as_posix()}"
-
+    # Explicitly catch the massive routing graph from the cache so it maps to outputs/
+    cached_graph = BASE_DIR / ".cache" / "cool_route" / "scored_walking.graphml"
+    if cached_graph.exists():
+        yield cached_graph, "outputs/scored_walking.graphml"
+    
     for path in sorted(BASE_DIR.glob("*.py")):
         if path.resolve() == Path(__file__).resolve():
             continue  # don't upload this uploader script to itself
