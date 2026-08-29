@@ -1327,17 +1327,34 @@
   }
 }
 /* --- LAYOUT AND SLIDING PANEL UPDATES --- */
-.app-layout {
-  display: grid;
-  grid-template-columns: minmax(300px, 348px) minmax(420px, 1fr) var(--right-panel-width, 340px);
-  transition: grid-template-columns 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  height: calc(100vh - 68px);
-  height: calc(100dvh - 68px);
-  min-height: 640px;
+/* --- LAYOUT AND SLIDING PANEL UPDATES --- */
+
+/* 1. Desktop only: Apply the sliding 3-column grid */
+@media (min-width: 1101px) {
+  .app-layout {
+    display: grid !important;
+    grid-template-columns: minmax(300px, 348px) minmax(420px, 1fr) var(--right-panel-width, 340px) !important;
+    transition: grid-template-columns 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .app-layout.panel-closed {
+    --right-panel-width: 0px;
+  }
 }
 
-.app-layout.panel-closed {
-  --right-panel-width: 0px;
+/* 2. Tablet & Mobile: Hide panel when closed */
+@media (max-width: 1100px) {
+  .app-layout.panel-closed .spots-panel {
+    display: none !important;
+  }
+}
+
+/* 3. Mobile: Let the map fill the remaining screen space when the panel closes */
+@media (max-width: 760px) {
+  .app-layout.panel-closed .map-panel {
+    height: auto !important;
+    max-height: none !important;
+    flex: 1;
+  }
 }
 
 .spots-panel {
@@ -1348,11 +1365,18 @@
   background: #f7f9fa;
 }
 
+/* 4. Fix horizontal overflow on narrow screens */
 .spots-panel-inner {
-  width: 340px;
+  width: 100%;
   height: 100%;
   display: flex;
   flex-direction: column;
+}
+
+@media (min-width: 1101px) {
+  .spots-panel-inner {
+    width: 340px;
+  }
 }
 
 /* --- FLOATING SIDE TABS --- */
