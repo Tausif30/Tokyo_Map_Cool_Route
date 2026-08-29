@@ -22,7 +22,6 @@ import math
 import os
 import time
 from pathlib import Path
-from typing import Callable
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -364,15 +363,6 @@ def snap_graph_nodes(
     )
 
 
-def set_cost(
-    graph: nx.MultiDiGraph,
-    attribute: str,
-    cost_function: Callable[[dict], float],
-) -> None:
-    for _, _, _, data in graph.edges(keys=True, data=True):
-        data[attribute] = max(float(cost_function(data)), 0.001)
-
-
 def route_frame(
     graph: nx.MultiDiGraph, route: list[int], weight: str
 ) -> gpd.GeoDataFrame:
@@ -397,29 +387,6 @@ def summarize_route(frame: gpd.GeoDataFrame) -> dict[str, float]:
         "station_score": weighted_average("station_score"),
     }
 
-
-def route_frame(
-    graph: nx.MultiDiGraph, route: list[int], weight: str
-) -> gpd.GeoDataFrame:
-    return ox.routing.route_to_gdf(graph, route, weight=weight)
-
-def summarize_route(frame: gpd.GeoDataFrame) -> dict[str, float]:
-    length = float(frame["length_m"].sum())
-
-    def weighted_average(column: str) -> float:
-        if length <= 0:
-            return 0.0
-        return float((frame[column] * frame["length_m"]).sum() / length)
-
-    return {
-        "length_m": length,
-        "walking_minutes": length / 80.0,
-        "heat_exposure_index": weighted_average("heat_exposure"),
-        "cooling_score": weighted_average("cooling_score"),
-        "tree_score": weighted_average("tree_score"),
-        "park_score": weighted_average("park_score"),
-        "station_score": weighted_average("station_score"),
-    }
 
 def calculate_routes(
     graph: nx.MultiDiGraph,

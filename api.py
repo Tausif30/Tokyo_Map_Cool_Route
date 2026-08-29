@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import pickle
+import time
 import numpy as np
 from scipy.spatial import cKDTree
 import geopandas as gpd
@@ -104,15 +105,32 @@ def _load_route_data(path: str):
         raise FileNotFoundError(
             f"Prepared route graph is missing at {path}. Run preparation script first."
         )
-    
+
+    t0 = time.perf_counter()
     with open(graph_path, "rb") as f:
         graph = pickle.load(f)
-        
+
+    # Fail fast with a clear message if ROUTE_GRAPH_PATH points at a graph
+    # that was never run through score_graph_edges() - without this check,
+    # the first sign of trouble is a KeyError deep inside calculate_routes(),
+    # on whatever request happens to be unlucky enough to trigger it.
+    edge = next(iter(graph.edges(data=True)), None)
+    if edge is None or "heat_exposure" not in edge[2]:
+        raise ValueError(
+            f"{graph_path} exists but its edges aren't scored (no "
+            "'heat_exposure' attribute). Re-run scripts/prepare_route_graph.py."
+        )
+
     nodes = list(graph.nodes(data=True))
     node_ids = np.array([n[0] for n in nodes])
     coords = np.array([[n[1]["x"], n[1]["y"]] for n in nodes])
     tree = cKDTree(coords)
-    
+
+    print(
+        f"Route graph ready: {len(graph):,} nodes, "
+        f"{graph.number_of_edges():,} edges "
+        f"({time.perf_counter() - t0:.1f}s)"
+    )
     return graph, node_ids, tree
 
 @app.get("/wbgt/status")
@@ -208,29 +226,59 @@ def walking_routes_endpoint(
                 detail="The two points snap to the same street intersection; choose a farther destination.",
             )
 
-        # 2. Extract a local bounding-box subgraph
-        ox_x, ox_y = global_graph.nodes[origin]["x"], global_graph.nodes[origin]["y"]
-        dx_x, dx_y = global_graph.nodes[destination]["x"], global_graph.nodes[destination]["y"]
-        
-        padding = max(2000, direct_distance * 0.5)
-        min_x, max_x = min(ox_x, dx_x) - padding, max(ox_x, dx_x) + padding
-        min_y, max_y = min(ox_y, dx_y) - padding, max(ox_y, dx_y) + padding
-        
-        local_nodes = [
-            n for n, d in global_graph.nodes(data=True)
-            if min_x <= d.get("x", 0) <= max_x and min_y <= d.get("y", 0) <= max_y
-        ]
-        
-        # We process math exclusively on the small local slice
-        local_graph = global_graph.subgraph(local_nodes)
-
-        routes = calculate_routes(
-            local_graph,
-            origin,
-            destination,
-            wbgt_c=wbgt_c,
-            max_detour_pct=max_detour_pct,
+        # 2. Extract a local subgraph using the SAME KD-tree, instead of a
+        #    Python loop over every node in the citywide graph. The old bbox
+        #    filter (`for n, d in global_graph.nodes(data=True): ...`) was
+        #    still O(N) per request regardless of how local the route was -
+        #    for a few million nodes that's the one full-graph sweep this
+        #    endpoint had left. query_ball_point is O(log N + k).
+        #
+        # Padding now also scales with max_detour_pct: a "find me a much
+        # cooler route even if it's longer" request needs more room to
+        # search in than a tightly-bounded one, or the coolest/balanced
+        # search can get truncated by the crop before it's even tried.
+        center = (
+            (points.x.iloc[0] + points.x.iloc[1]) / 2,
+            (points.y.iloc[0] + points.y.iloc[1]) / 2,
         )
+        padding = max(2_000.0, direct_distance * (0.5 + max_detour_pct / 100))
+        radius = direct_distance / 2 + padding
+
+        routes = None
+        for _attempt in range(3):
+            hits = kd_tree.query_ball_point(center, r=radius)
+            candidate_nodes = {int(node_ids[i]) for i in hits}
+            if origin in candidate_nodes and destination in candidate_nodes:
+                # .copy() turns the view into an independent small graph -
+                # cheap at this size (a few thousand nodes, not millions),
+                # and cheap insurance against a future change reintroducing
+                # in-place edge mutation (e.g. set_cost()) on shared state.
+                local_graph = global_graph.subgraph(candidate_nodes).copy()
+                try:
+                    routes = calculate_routes(
+                        local_graph,
+                        origin,
+                        destination,
+                        wbgt_c=wbgt_c,
+                        max_detour_pct=max_detour_pct,
+                    )
+                    break
+                except RuntimeError:
+                    pass  # both nodes present but not connected within this crop
+            radius *= 2  # widen and try again
+
+        if routes is None:
+            # Last resort: the full citywide graph. Slow if it's ever hit,
+            # but correct - a real gap (river with no bridge in range, an
+            # island, etc.) shouldn't come back as a false "no path" just
+            # because the crop was too tight.
+            routes = calculate_routes(
+                global_graph,
+                origin,
+                destination,
+                wbgt_c=wbgt_c,
+                max_detour_pct=max_detour_pct,
+            )
         return {
             "query": {
                 "start": {"lat": start_lat, "lon": start_lon},
