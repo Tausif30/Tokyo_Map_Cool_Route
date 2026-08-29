@@ -2,23 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import type { Place } from "./types";
 
 interface SearchBoxProps {
-  /** Called when the user picks a result — from typing OR (see note in
-   * the module comment at the bottom) from clicking an item in the
-   * existing "Nearby cool spots" list. Wire both to this same handler
-   * in the parent so Point B always gets set the same way regardless
-   * of which UI the place came from. */
   onSelect: (place: Place) => void;
-  /** Optional (lat, lon) — usually Point A / current location — used
-   * server-side to break ties between similarly-good text matches by
-   * distance. Omit if there's no current location yet. */
   near?: { lat: number; lon: number };
-  /** Restrict results to specific categories, e.g. ["Hospital",
-   * "Pharmacy"]. Omit to search everything. */
   categories?: string[];
-  /** Base URL of the FastAPI backend. Defaults to same-origin, which is
-   * fine once frontend+API are served together — override this during
-   * local dev if they're on different ports (see api.py's own
-   * location_test.html for that exact situation). */
   apiBaseUrl?: string;
   placeholder?: string;
 }
@@ -74,7 +60,6 @@ export default function SearchBox({
           return res.json() as Promise<Place[]>;
         })
         .then((data) => {
-          // ignore stale responses if the user kept typing
           if (thisRequest !== requestSeq.current) return;
           setResults(data);
           setIsOpen(true);
@@ -129,8 +114,16 @@ export default function SearchBox({
   }
 
   return (
-    <div ref={containerRef} style={{ position: "relative", width: "100%" }}>
+    <div ref={containerRef} className="searchbox-wrapper">
+      <span className="searchbox-icon">
+        <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+      </span>
+      
       <input
+        className="searchbox-input"
         type="text"
         value={query}
         placeholder={placeholder}
@@ -140,30 +133,26 @@ export default function SearchBox({
         aria-autocomplete="list"
         aria-expanded={isOpen}
       />
-      {isOpen && (
-        <div
-          role="listbox"
-          style={{
-            position: "absolute",
-            top: "100%",
-            left: 0,
-            right: 0,
-            zIndex: 20,
-            background: "white",
-            border: "1px solid #ddd",
-            borderRadius: 8,
-            marginTop: 4,
-            maxHeight: 280,
-            overflowY: "auto",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-          }}
+      
+      {query && (
+        <button 
+          className="searchbox-clear" 
+          onClick={() => { setQuery(""); setResults([]); setIsOpen(false); }}
+          aria-label="Clear search"
         >
-          {isLoading && <div style={{ padding: 12 }}>Searching...</div>}
-          {!isLoading && error && (
-            <div style={{ padding: 12, color: "#c0392b" }}>{error}</div>
-          )}
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      )}
+
+      {isOpen && (
+        <div role="listbox" className="search-results-list">
+          {isLoading && <div className="search-status">Searching...</div>}
+          {!isLoading && error && <div className="search-status error">{error}</div>}
           {!isLoading && !error && results.length === 0 && (
-            <div style={{ padding: 12, color: "#888" }}>No matches found</div>
+            <div className="search-status">No matches found</div>
           )}
           {!isLoading &&
             !error &&
@@ -171,21 +160,17 @@ export default function SearchBox({
               <div
                 key={`${place.category}-${place.name}-${index}`}
                 role="option"
+                className={`search-option ${index === highlightedIndex ? 'highlighted' : ''}`}
                 aria-selected={index === highlightedIndex}
                 onMouseEnter={() => setHighlightedIndex(index)}
                 onClick={() => pick(place)}
-                style={{
-                  padding: "8px 12px",
-                  cursor: "pointer",
-                  background: index === highlightedIndex ? "#eef4ff" : "white",
-                }}
               >
-                <div style={{ fontWeight: 600 }}>{place.name}</div>
-                <div style={{ fontSize: 12, color: "#888" }}>
+                <strong>{place.name}</strong>
+                <span>
                   {place.category}
                   {place.distance_m !== undefined &&
                     ` · ${(place.distance_m / 1000).toFixed(1)} km`}
-                </div>
+                </span>
               </div>
             ))}
         </div>
@@ -193,30 +178,3 @@ export default function SearchBox({
     </div>
   );
 }
-
-/*
-INTEGRATION NOTES (the part I can't do for you without seeing App.tsx /
-MapView.tsx — see chat message):
-
-1. Replace whatever currently renders "Point B / COOL DESTINATION /
-   Select a place on the map" with:
-       <SearchBox
-         near={pointA ? { lat: pointA.lat, lon: pointA.lon } : undefined}
-         onSelect={handleSelectDestination}
-       />
-
-2. Define ONE shared handler in App.tsx:
-       function handleSelectDestination(place: Place) {
-         setPointB({ lat: place.lat, lon: place.lon, label: place.name });
-         mapRef.current?.flyTo([place.lat, place.lon], 15); // or however
-       }                                                     // MapView
-                                                               // currently
-                                                               // exposes
-                                                               // map control
-
-3. Wire the EXACT SAME handler to each item's onClick in the existing
-   right-panel "Nearby cool spots" list — that's the "lock into that one
-   as well" part of the ask. Whatever shape that list's items are in
-   today, as long as each one can produce a {name, category, lat, lon}
-   it can call handleSelectDestination directly, no new logic needed.
-*/
