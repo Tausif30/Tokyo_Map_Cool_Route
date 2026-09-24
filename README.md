@@ -243,8 +243,6 @@ The FastAPI backend (`api.py`) exposes:
 
 The code in this repository is released under the **MIT Licence** — see [LICENSE](LICENSE) for the full text.
 
-This covers the code only. Each dataset keeps its own original licence and attribution requirements — see **[SOURCES.md](SOURCES.md)**, and note that the OpenStreetMap-derived layers are ODbL and require the © OpenStreetMap contributors attribution shown in-app.
-
 ## Acknowledgments
 
 Built for the **Tokyo Metropolitan Government Open Data Hackathon 2026**. Thanks to the Ministry of the Environment, the Tokyo Open Data Catalog, MLIT, and the OpenStreetMap community for making this possible.
