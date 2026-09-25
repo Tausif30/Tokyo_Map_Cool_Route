@@ -83,7 +83,13 @@ flowchart LR
 
     API --> FRONTEND[React + Leaflet frontend]
 ```
+---
 
+**Run Time Architecture**
+
+<img width="6210" height="5152" alt="diagram" src="https://github.com/user-attachments/assets/ebd996ac-f352-4318-81cc-245cf4c999f4" />
+
+---
 **Run order:** `Map_Data.py` runs first — it's the only source of the tree/green layers everything else depends on — followed by the two Pipeline B clean-up scripts (`Map_Data_Fix_Columns.py`, `Map_Value_Fix.py`). `Analysis.py` / `EDA.py` / `wbgt.py` handle the yearbook + chart side. `prepare_route_graph.py` runs once to pre-score the walking graph before the API starts, so route requests stay fast at runtime. A handful of supporting scripts (`Ward_Boundaries.py`, `OSM_Tokyo_Extract.py`, `OS_Crop_To_Tokyo.py`, `scripts/fetch_convenience_stores.py`) prepare the OpenStreetMap-derived layers (ward boundaries, the Tokyo-area extract, and convenience stores) that the routing and search layers read.
 
 `WBGT_Monitor.py` is meant to run on a schedule (cron, Task Scheduler, or a GitHub Action) to keep `outputs/WBGT_Current_Status.json` fresh — that's the file the frontend polls for its live status banner.
@@ -221,15 +227,6 @@ The FastAPI backend (`api.py`) exposes:
 **No personal data is collected.** No account, no stored age or condition data — inputs live only in the current session.
 
 **Route weighting is a heuristic**, not a scientifically validated model. The cooling-score weights (tree proximity, park proximity, distance to water, and so on) are our own tunable estimates for this demo, not measured street-level temperatures.
-
----
-
-## What's Next
-
-- [ ] Replace the heuristic cooling weights with measured or modeled street-level temperature data, if it becomes available.
-- [ ] Serve WBGT forecast data, not just the current reading.
-- [ ] Expand the Heatstroke Safety Guide to more languages.
-- [ ] Add offline / low-connectivity support for the map.
 
 ---
 
